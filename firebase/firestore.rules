@@ -1,0 +1,280 @@
+rules_version = '2';
+
+// Biomate Firestore security rules.
+//
+// The guiding rule: the client may describe what it did, but never what it earned.
+// Profiles, trips, gear and messages are client-writable within tight ownership and
+// membership limits; BioCoins, badges and challenge verdicts are written only by the
+// Cloud Functions service account, because a client that can write its own balance has
+// no balance worth reading.
+service cloud.firestore {
+  function isSignedIn() {
+    return request.auth != null;
+  }
+
+  function isSelf(uid) {
+    return isSignedIn() && request.auth.uid == uid;
+  }
+
+  // Trusted server writes arrive with no auth token via the Admin SDK, which bypasses
+  // these rules entirely. Every `allow write: if false` below therefore means
+  // "clients never, Cloud Functions always".
+  match /databases/{database}/documents {
+
+    // ---- Profiles ---------------------------------------------------------------
+    //
+    // Readable by any signed-in user: HikeMatch has to be able to score candidates.
+    // What is readable is limited by what is stored — `homeArea` is a free-text locality
+    // and there is no coordinate field on a profile at all.
+    match /users/{uid} {
+      allow read: if isSignedIn();
+
+      allow create: if isSelf(uid)
+        && request.resource.data.uid == uid
+        && !request.resource.data.keys().hasAny(['bioCoins', 'badges', 'stats']);
+
+      allow update: if isSelf(uid)
+        // Reputation lives elsewhere and is server-owned. Rejecting the keys outright is
+        // simpler and safer than trying to prove the values did not change.
+        && !request.resource.data.diff(resource.data).affectedKeys()
+             .hasAny(['bioCoins', 'badges', 'stats', 'uid', 'createdAt']);
+
+      allow delete: if isSelf(uid);
+
+      // ---- Derived, server-owned reputation ------------------------------------
+      match /stats/{docId} {
+        allow read: if isSignedIn();
+        allow write: if false;
+      }
+
+      match /badges/{badgeId} {
+        allow read: if isSignedIn();
+        allow write: if false;
+      }
+
+      // A user's own saved trails are private to them.
+      match /savedTrails/{trailId} {
+        allow read, write: if isSelf(uid);
+      }
+    }
+
+    // ---- BioCoin ledger ----------------------------------------------------------
+    //
+    // Read-only to its owner, append-only from the server. There is deliberately no
+    // client path that can create a transaction, however well-formed.
+    match /coinTransactions/{transactionId} {
+      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow write: if false;
+    }
+
+    // Aggregated balances used by the leaderboard. Publicly readable, server-written.
+    match /leaderboard/{uid} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // ---- Trails ------------------------------------------------------------------
+    //
+    // Reference data. Everyone reads; only an operator (via the Admin SDK) writes.
+    match /trails/{trailId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // ---- Connections -------------------------------------------------------------
+    match /connections/{connectionId} {
+      function isParticipant() {
+        return isSignedIn()
+          && (resource.data.requesterId == request.auth.uid
+              || resource.data.addresseeId == request.auth.uid);
+      }
+
+      allow read: if isParticipant();
+
+      // You may only send a request as yourself, and not to yourself.
+      allow create: if isSignedIn()
+        && request.resource.data.requesterId == request.auth.uid
+        && request.resource.data.addresseeId != request.auth.uid
+        && request.resource.data.status == 'PENDING';
+
+      // Only the person who was asked may accept or reject. Without this, a requester
+      // could accept on the other party's behalf.
+      allow update: if isSignedIn()
+        && resource.data.addresseeId == request.auth.uid
+        && request.resource.data.status in ['ACCEPTED', 'REJECTED']
+        && request.resource.data.requesterId == resource.data.requesterId
+        && request.resource.data.addresseeId == resource.data.addresseeId;
+
+      allow delete: if isParticipant();
+    }
+
+    // ---- Trips -------------------------------------------------------------------
+    match /trips/{tripId} {
+      function isOrganiser() {
+        return isSignedIn() && resource.data.creatorId == request.auth.uid;
+      }
+
+      function isMember() {
+        return isSignedIn()
+          && exists(/databases/$(database)/documents/trips/$(tripId)/members/$(request.auth.uid));
+      }
+
+      allow read: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && request.resource.data.creatorId == request.auth.uid
+        && request.resource.data.status == 'PLANNING';
+
+      // Only the organiser edits the trip itself. Participants change their own member
+      // document, their own readiness, and gear they are responsible for.
+      allow update: if isOrganiser()
+        && request.resource.data.creatorId == resource.data.creatorId;
+
+      allow delete: if isOrganiser();
+
+      match /members/{memberUid} {
+        allow read: if isSignedIn();
+
+        // The organiser manages the roster; a user may write their own membership to
+        // accept an invite, join or leave.
+        allow write: if isSelf(memberUid)
+          || (isSignedIn()
+              && get(/databases/$(database)/documents/trips/$(tripId)).data.creatorId == request.auth.uid);
+      }
+
+      match /gear/{itemId} {
+        allow read: if isMember();
+
+        allow create, delete: if isMember();
+
+        // Anyone on the trip may claim an unassigned item or update one assigned to them;
+        // the organiser may reassign anything. Ticking off someone else's gear would make
+        // the pre-departure checklist meaningless.
+        allow update: if isMember()
+          && (resource.data.assignedToUid == null
+              || resource.data.assignedToUid == request.auth.uid
+              || request.resource.data.assignedToUid == request.auth.uid
+              || get(/databases/$(database)/documents/trips/$(tripId)).data.creatorId == request.auth.uid);
+      }
+
+      match /readiness/{memberUid} {
+        // Everyone on the trip can see how ready the group is...
+        allow read: if isMember();
+        // ...but only you can answer for you (spec section 25).
+        allow write: if isSelf(memberUid) && isMember();
+      }
+    }
+
+    // ---- Conversations and messages ----------------------------------------------
+    match /conversations/{conversationId} {
+      function isConversationMember() {
+        return isSignedIn() && request.auth.uid in resource.data.memberIds;
+      }
+
+      allow read: if isConversationMember();
+
+      allow create: if isSignedIn()
+        && request.auth.uid in request.resource.data.memberIds;
+
+      // Membership changes and read receipts are allowed; the conversation type and its
+      // trip binding are not, so a direct chat cannot be quietly converted into a trip one.
+      allow update: if isConversationMember()
+        && request.resource.data.type == resource.data.type
+        && request.resource.data.tripId == resource.data.tripId;
+
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        function conversationMembers() {
+          return get(/databases/$(database)/documents/conversations/$(conversationId)).data.memberIds;
+        }
+
+        allow read: if isSignedIn() && request.auth.uid in conversationMembers();
+
+        // You may only send as yourself, and only into a conversation you belong to.
+        allow create: if isSignedIn()
+          && request.auth.uid in conversationMembers()
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 4000;
+
+        // Messages are immutable once sent. Editing history in a group planning a trip
+        // into terrain that can kill you is not a feature.
+        allow update, delete: if false;
+      }
+    }
+
+    // ---- Trail moments -----------------------------------------------------------
+    match /trailMoments/{momentId} {
+      allow read: if isSignedIn();
+
+      // Created as yourself only. The coordinates come from the device; the rules cannot
+      // verify that, which is why the client has no API that accepts an arbitrary point.
+      allow create: if isSignedIn()
+        && request.resource.data.creatorId == request.auth.uid
+        && request.resource.data.latitude is number
+        && request.resource.data.longitude is number
+        && request.resource.data.visibility in ['PUBLIC', 'CONNECTIONS', 'TRIP'];
+
+      // The author may correct their own report. Anyone signed in may add an upvote, but
+      // only by changing the upvote count and nothing else.
+      allow update: if isSignedIn()
+        && (resource.data.creatorId == request.auth.uid
+            || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['upvotes']));
+
+      allow delete: if isSignedIn() && resource.data.creatorId == request.auth.uid;
+    }
+
+    // ---- Challenges --------------------------------------------------------------
+    //
+    // The catalogue is reference data.
+    match /challenges/{challengeId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // A user's daily assignment. Readable by its owner; written by the server, which is
+    // what stops a client marking its own challenge complete and claiming the reward.
+    match /dailyChallenges/{dailyId} {
+      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow write: if false;
+    }
+
+    // Photo submissions: create-once, then server-owned.
+    match /challengeSubmissions/{submissionId} {
+      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.state == 'PENDING';
+
+      // Immutable to the client. The verdict is written by the verification function, and
+      // a user cannot flip their own FAILED to PASSED (spec section 46).
+      allow update, delete: if false;
+    }
+
+    // ---- Adventure sessions ------------------------------------------------------
+    match /adventureSessions/{sessionId} {
+      allow read: if isSignedIn() && resource.data.uid == request.auth.uid;
+
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'ACTIVE';
+
+      // The owner records their own distance and completion. This is trusted input — the
+      // MVP does not attempt GPS anti-cheat (spec section 39) — but it is trusted only
+      // for *statistics*. Coins are still issued by the server after its own checks.
+      allow update: if isSignedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == resource.data.uid;
+
+      allow delete: if false;
+    }
+
+    // Anything not matched above is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

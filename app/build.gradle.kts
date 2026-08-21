@@ -1,4 +1,5 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
+import java.util.Properties
 
 plugins {
   alias(libs.plugins.android.application)
@@ -7,6 +8,26 @@ plugins {
   alias(libs.plugins.roborazzi)
   alias(libs.plugins.secrets)
   alias(libs.plugins.google.services)
+}
+
+
+/**
+ * Finds the Google Maps API key, or returns an empty string.
+ *
+ * Order: `.env` (git-ignored, matches the secrets plugin convention), then
+ * `local.properties`, then a `MAPS_API_KEY` environment variable for CI. Never commit a
+ * real key to any of these — see README.md.
+ */
+fun resolveMapsApiKey(): String {
+  val fromFiles: String? = listOf(rootProject.file(".env"), rootProject.file("local.properties"))
+    .firstNotNullOfOrNull { file ->
+      if (!file.exists()) return@firstNotNullOfOrNull null
+      val properties = Properties()
+      file.inputStream().use { properties.load(it) }
+      val value: String? = properties.getProperty("MAPS_API_KEY")
+      if (value.isNullOrBlank() || value == "YOUR_MAPS_API_KEY") null else value
+    }
+  return fromFiles ?: System.getenv("MAPS_API_KEY").orEmpty()
 }
 
 android {
@@ -21,6 +42,16 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+    // The Maps SDK reads its key from a manifest meta-data entry, which needs the value
+    // at configuration time rather than as a BuildConfig field. Resolved from `.env`,
+    // then `local.properties`, then an environment variable, so CI and a local checkout
+    // can each supply it their own way.
+    //
+    // The fallback is an empty string rather than a hard failure: without a key the map
+    // tiles do not render, but every other part of the app — GPS, distance, moments —
+    // still works, and a contributor should not be blocked from building over it.
+    manifestPlaceholders["MAPS_API_KEY"] = resolveMapsApiKey()
   }
 
   signingConfigs {
@@ -57,6 +88,7 @@ android {
     buildConfig = true
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
+  packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
   dependenciesInfo {
     includeInApk = false
     includeInBundle = true
@@ -78,12 +110,12 @@ googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.W
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
   implementation(platform(libs.firebase.bom))
-  // implementation(libs.accompanist.permissions)
+  implementation(libs.accompanist.permissions)
   implementation(libs.androidx.activity.compose)
-  // implementation(libs.androidx.camera.camera2)
-  // implementation(libs.androidx.camera.core)
-  // implementation(libs.androidx.camera.lifecycle)
-  // implementation(libs.androidx.camera.view)
+  implementation(libs.androidx.camera.camera2)
+  implementation(libs.androidx.camera.core)
+  implementation(libs.androidx.camera.lifecycle)
+  implementation(libs.androidx.camera.view)
   implementation(libs.androidx.compose.material.icons.core)
   implementation(libs.androidx.compose.material.icons.extended)
   implementation(libs.androidx.compose.material3)
@@ -91,7 +123,7 @@ dependencies {
   implementation(libs.androidx.compose.ui.graphics)
   implementation(libs.androidx.compose.ui.tooling.preview)
   implementation(libs.androidx.core.ktx)
-  // implementation(libs.androidx.datastore.preferences)
+  implementation(libs.androidx.datastore.preferences)
   implementation(libs.androidx.lifecycle.runtime.compose)
   implementation(libs.androidx.lifecycle.runtime.ktx)
   implementation(libs.androidx.lifecycle.viewmodel.compose)
@@ -101,22 +133,20 @@ dependencies {
   implementation(libs.coil.compose)
   implementation(libs.converter.moshi)
   implementation(libs.firebase.ai)
-  // Uncomment to use Firestore:
-  // implementation(libs.firebase.firestore)
+  implementation(libs.firebase.firestore)
+  implementation(libs.firebase.storage)
+  implementation(libs.firebase.functions)
 
-  // Uncomment ALL FOUR of the following dependencies together to use Firebase Auth and Google
-  // Sign-In via Credential Manager:
-  // implementation(libs.firebase.auth)
-  // implementation(libs.androidx.credentials)
-  // implementation(libs.androidx.credentials.play.services)
-  // implementation(libs.googleid)
+  implementation(libs.firebase.auth)
   implementation(libs.firebase.appcheck.recaptcha)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.logging.interceptor)
   implementation(libs.moshi.kotlin)
   implementation(libs.okhttp)
-  // implementation(libs.play.services.location)
+  implementation(libs.play.services.location)
+  implementation(libs.play.services.maps)
+  implementation(libs.maps.compose)
   implementation(libs.retrofit)
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)

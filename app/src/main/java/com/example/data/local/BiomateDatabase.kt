@@ -4,81 +4,66 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.room.TypeConverters
-import androidx.sqlite.db.SupportSQLiteDatabase
-import com.example.data.model.AdventureChallenge
-import com.example.data.model.AdventureStory
-import com.example.data.model.ChatMessage
-import com.example.data.model.CommunityGroup
-import com.example.data.model.HikeBuddy
-import com.example.data.model.SharedGearItem
-import com.example.data.model.SpeciesScan
-import com.example.data.model.Trail
-import com.example.data.model.TrailMoment
-import com.example.data.model.TripMeal
-import com.example.data.model.TripParticipant
-import com.example.data.model.TripPlan
-import com.example.data.model.UserAccount
-import com.example.data.model.UserProfile
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
+/**
+ * The Biomate local database.
+ *
+ * Room is the offline cache and, when no Firebase project is configured, the system of
+ * record (spec section 65). Trails, the active trip and the signed-in profile stay
+ * readable without a network, which matters most exactly when it is least available —
+ * partway along a trail.
+ *
+ * All list-shaped fields are encoded to `String` columns by `data/mapper/Codec.kt`, so
+ * there are no type converters to keep in step with the schema.
+ */
 @Database(
     entities = [
-        Trail::class,
-        HikeBuddy::class,
-        TripPlan::class,
-        TripParticipant::class,
-        SharedGearItem::class,
-        TripMeal::class,
-        ChatMessage::class,
-        TrailMoment::class,
-        SpeciesScan::class,
-        AdventureStory::class,
-        CommunityGroup::class,
-        AdventureChallenge::class,
-        UserProfile::class,
-        UserAccount::class
+        ProfileEntity::class,
+        LocalCredentialEntity::class,
+        TrailEntity::class,
+        SavedTrailEntity::class,
+        ConnectionEntity::class,
+        TripEntity::class,
+        TripMemberEntity::class,
+        GearItemEntity::class,
+        ReadinessEntity::class,
+        ConversationEntity::class,
+        MessageEntity::class,
+        TrailMomentEntity::class,
+        DailyChallengeEntity::class,
+        ChallengeSubmissionEntity::class,
+        CoinTransactionEntity::class,
+        EarnedBadgeEntity::class,
+        AdventureSessionEntity::class
     ],
-    version = 2,
+    version = 1,
     exportSchema = false
 )
-@TypeConverters(Converters::class)
 abstract class BiomateDatabase : RoomDatabase() {
 
-    abstract fun biomateDao(): BiomateDao
+    abstract fun daoV2(): BiomateDaoV2
 
     companion object {
         @Volatile
         private var INSTANCE: BiomateDatabase? = null
 
-        fun getDatabase(context: Context, scope: CoroutineScope): BiomateDatabase {
-            return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
+        fun getDatabase(context: Context, scope: CoroutineScope): BiomateDatabase =
+            INSTANCE ?: synchronized(this) {
+                INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     BiomateDatabase::class.java,
-                    "biomate_database"
+                    DATABASE_NAME
                 )
-                    .addCallback(BiomateDatabaseCallback(scope))
-                    .fallbackToDestructiveMigration()
+                    // The prototype's schema shared no tables with this one and stored
+                    // plaintext passwords, so there is nothing worth migrating. A new
+                    // database file makes the break explicit rather than leaving dead
+                    // tables behind on upgraded installs.
+                    .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
-                INSTANCE = instance
-                instance
+                    .also { INSTANCE = it }
             }
-        }
-    }
 
-    private class BiomateDatabaseCallback(
-        private val scope: CoroutineScope
-    ) : Callback() {
-        override fun onCreate(db: SupportSQLiteDatabase) {
-            super.onCreate(db)
-            INSTANCE?.let { database ->
-                scope.launch(Dispatchers.IO) {
-                    populateInitialData(database.biomateDao())
-                }
-            }
-        }
+        private const val DATABASE_NAME = "biomate.db"
     }
 }

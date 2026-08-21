@@ -1,0 +1,55 @@
+rules_version = '2';
+
+// Biomate Cloud Storage rules.
+//
+// Every path is namespaced by the uploader's uid, so a user can only ever write into
+// their own folder. Size and content-type limits are enforced here rather than trusted
+// from the client, because an unbounded upload path is both a cost problem and an abuse
+// vector.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    function isReasonableSize() {
+      return request.resource.size < 8 * 1024 * 1024;
+    }
+
+    // Profile photos are shown next to a user's name throughout the app, so they are
+    // readable by any signed-in user and writable only by their owner.
+    match /users/{uid}/profile/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSelf(uid) && isImage() && isReasonableSize();
+    }
+
+    // Trail moment photos accompany a public community report.
+    match /trail-moments/{uid}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSelf(uid) && isImage() && isReasonableSize();
+    }
+
+    // Challenge submissions are private to the submitter and the verification function.
+    // Nobody else needs to see them, and making them readable would let users copy each
+    // other's answers.
+    match /challenge-submissions/{uid}/{fileName} {
+      allow read: if isSelf(uid);
+      allow create: if isSelf(uid) && isImage() && isReasonableSize();
+      // Immutable once written, matching the submission record itself.
+      allow update, delete: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
