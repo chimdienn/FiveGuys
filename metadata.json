@@ -1,0 +1,6 @@
+{
+  "name": "Biomate",
+  "description": "Outdoor adventure companion: find compatible hiking partners, collaborative trip planning, on-trail navigation, hazard alerts, species scanning, and shared adventure stories.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
