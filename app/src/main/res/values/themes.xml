@@ -1,5 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.MyApplication" parent="android:Theme.DeviceDefault.NoActionBar" />
+    <!--
+      This is a Compose-only app: it depends on androidx.compose.material3, not the
+      com.google.android.material XML library, so `Theme.Material3.*` styles do not exist
+      here. The platform DeviceDefault theme is the right parent.
+
+      The only thing this theme is really responsible for is `windowBackground` — the
+      colour shown for the instant between the window appearing and Compose's first frame.
+      It is overridden here because the DeviceDefault default disagreed with the Compose
+      colour scheme, which showed up as a dark flash (and, on screens that painted no
+      background of their own, dark-on-dark text).
+
+      `values-night/colors.xml` supplies the dark counterpart.
+    -->
+    <style name="Theme.MyApplication" parent="android:Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+    </style>
 </resources>

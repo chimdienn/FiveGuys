@@ -1,6 +1,9 @@
 package com.example.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -56,6 +59,16 @@ fun MyApplicationTheme(
 ) {
   val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
 
-  MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
+  MaterialTheme(colorScheme = colorScheme, typography = Typography) {
+    // Every screen sits on a Surface that paints the theme background.
+    //
+    // Without this, a screen that does not draw its own background (onboarding, for
+    // instance) shows the Android *window* background instead — which comes from a
+    // different resource and disagreed with the Compose colour scheme, producing dark
+    // text on a dark window.
+    Surface(modifier = Modifier.fillMaxSize(), color = colorScheme.background) {
+      content()
+    }
+  }
 }
 

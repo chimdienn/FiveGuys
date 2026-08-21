@@ -54,24 +54,27 @@ val Typography = Typography(
         lineHeight = 18.sp,
         letterSpacing = 0.8.sp
     ),
+    // Primary reading size. Kept at 16sp: below that, long descriptions and chat
+    // messages become hard work on a phone held at arm's length in bright sun.
     bodyLarge = TextStyle(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Normal,
-        fontSize = 15.sp,
-        lineHeight = 22.sp,
+        fontSize = 16.sp,
+        lineHeight = 24.sp,
         letterSpacing = 0.25.sp
     ),
     bodyMedium = TextStyle(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Normal,
-        fontSize = 13.sp,
-        lineHeight = 18.sp,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
         letterSpacing = 0.2.sp
     ),
+    // Reserved for metadata (timestamps, captions) — never for content the user must read.
     bodySmall = TextStyle(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Normal,
-        fontSize = 11.sp,
+        fontSize = 12.sp,
         lineHeight = 16.sp,
         letterSpacing = 0.2.sp
     ),

@@ -1,763 +1,471 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.Badge
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.Hiking
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material.icons.filled.Terrain
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.example.data.model.UserAccount
-import com.example.ui.BiomateViewModel
-import com.example.ui.theme.AmberSunrise
-import com.example.ui.theme.CardSurfaceSand
-import com.example.ui.theme.ForestGreenPrimary
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.auth.LocalAuthRepository
+import com.example.data.seed.SeedUsers
 import com.example.ui.theme.GradientTerracottaEnd
 import com.example.ui.theme.GradientTerracottaStart
-import com.example.ui.theme.OutlineSubtle
-import com.example.ui.theme.SandBackground
-import com.example.ui.theme.SurfaceVariantSand
-import com.example.ui.theme.TerracottaDark
-import com.example.ui.theme.TerracottaPrimary
-import com.example.ui.theme.TextCharcoal
-import com.example.ui.theme.TextDark
-import com.example.ui.theme.TextLightMuted
-import com.example.ui.theme.TextMuted
+import com.example.ui.viewmodel.SessionViewModel
 
+private enum class AuthMode { SIGN_IN, REGISTER, RESET }
+
+/**
+ * Sign in, register and password reset.
+ *
+ * Validation runs on the client for immediate feedback, but the repository validates
+ * again — a client check is a courtesy, never a control. Errors are surfaced inline next
+ * to the field that caused them rather than in a snackbar that scrolls away.
+ */
 @Composable
-fun AuthScreen(
-    viewModel: BiomateViewModel,
-    modifier: Modifier = Modifier
-) {
-    val allAccounts by viewModel.allAccounts.collectAsState()
-    val authError by viewModel.authError.collectAsState()
-    val isAuthLoading by viewModel.isAuthLoading.collectAsState()
-    val focusManager = LocalFocusManager.current
+fun AuthScreen(viewModel: SessionViewModel) {
+    val isSubmitting by viewModel.isSubmitting.collectAsStateWithLifecycle()
+    val formError by viewModel.formError.collectAsStateWithLifecycle()
+    val notice by viewModel.notice.collectAsStateWithLifecycle()
 
-    var isSignUpMode by remember { mutableStateOf(false) }
-
-    // Form states
-    var emailInput by remember { mutableStateOf("alex@biomate.outdoors") }
-    var passwordInput by remember { mutableStateOf("trail2026") }
+    var mode by remember { mutableStateOf(AuthMode.SIGN_IN) }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var displayName by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
+    var touched by remember { mutableStateOf(false) }
 
-    // Sign Up Fields
-    var nameInput by remember { mutableStateOf("") }
-    var handleInput by remember { mutableStateOf("") }
-    var bioInput by remember { mutableStateOf("") }
-    var selectedFitness by remember { mutableStateOf("Advanced") }
-    var selectedPace by remember { mutableStateOf("Moderate (4.5 km/h)") }
+    val keyboard = LocalSoftwareKeyboardController.current
 
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .background(SandBackground)
-            .padding(horizontal = 20.dp),
-        contentPadding = PaddingValues(top = 28.dp, bottom = 48.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(20.dp)
-    ) {
-        // App Hero Branding
-        item {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(72.dp)
-                        .shadow(12.dp, CircleShape, spotColor = TerracottaDark)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(
-                                listOf(GradientTerracottaStart, GradientTerracottaEnd)
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Terrain,
-                        contentDescription = "BioMate Logo",
-                        tint = Color.White,
-                        modifier = Modifier.size(38.dp)
-                    )
-                }
+    // Clearing on mode change stops a "wrong password" error hanging over the register form.
+    LaunchedEffect(mode) {
+        viewModel.clearFormError()
+        viewModel.clearNotice()
+        touched = false
+    }
 
-                Spacer(modifier = Modifier.height(14.dp))
+    val emailError = if (touched) LocalAuthRepository.validateEmail(email) else null
+    val passwordError = when {
+        !touched -> null
+        mode == AuthMode.RESET -> null
+        mode == AuthMode.REGISTER -> LocalAuthRepository.validatePassword(password)
+        password.isEmpty() -> "Enter your password."
+        else -> null
+    }
+    val nameError = if (touched && mode == AuthMode.REGISTER && displayName.isBlank()) {
+        "Enter a display name."
+    } else null
 
-                Text(
-                    text = "BIOMATE",
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Black,
-                    color = TextDark,
-                    letterSpacing = 2.sp
-                )
+    val canSubmit = !isSubmitting && when (mode) {
+        AuthMode.SIGN_IN -> email.isNotBlank() && password.isNotBlank()
+        AuthMode.REGISTER -> email.isNotBlank() && password.isNotBlank() && displayName.isNotBlank()
+        AuthMode.RESET -> email.isNotBlank()
+    }
 
-                Text(
-                    text = "Outdoor Expeditions & Companion Network",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = TextMuted,
-                    textAlign = TextAlign.Center
-                )
-            }
+    fun submit() {
+        touched = true
+        if (!canSubmit) return
+        if (emailError != null || passwordError != null || nameError != null) return
+        keyboard?.hide()
+        when (mode) {
+            AuthMode.SIGN_IN -> viewModel.signIn(email, password)
+            AuthMode.REGISTER -> viewModel.register(email, password, displayName)
+            AuthMode.RESET -> viewModel.sendPasswordReset(email)
         }
+    }
 
-        // Mode Switcher Tabs
-        item {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(GradientTerracottaStart, GradientTerracottaEnd)
+                )
+            )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                // The gradient stays full-bleed behind the system bars; only the content
+                // is inset.
+                .safeDrawingPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(Modifier.height(24.dp))
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surface, modifier = Modifier.size(84.dp)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text("🥾", style = MaterialTheme.typography.displayMedium)
+                }
+            }
+            Spacer(Modifier.height(20.dp))
+            Text(
+                "Biomate",
+                style = MaterialTheme.typography.displayLarge,
+                color = MaterialTheme.colorScheme.onPrimary
+            )
+            Text(
+                "Find people. Plan adventures. Get outside.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onPrimary,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(Modifier.height(32.dp))
+
             Surface(
                 shape = RoundedCornerShape(28.dp),
-                color = SurfaceVariantSand,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
+                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(24.dp))
-                            .background(if (!isSignUpMode) TerracottaPrimary else Color.Transparent)
-                            .clickable {
-                                isSignUpMode = false
-                                viewModel.clearAuthError()
-                            }
-                            .padding(vertical = 10.dp)
-                            .testTag("tab_sign_in"),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Sign In",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (!isSignUpMode) Color.White else TextMuted
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(24.dp))
-                            .background(if (isSignUpMode) TerracottaPrimary else Color.Transparent)
-                            .clickable {
-                                isSignUpMode = true
-                                viewModel.clearAuthError()
-                            }
-                            .padding(vertical = 10.dp)
-                            .testTag("tab_create_account"),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Create Account",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isSignUpMode) Color.White else TextMuted
-                        )
-                    }
-                }
-            }
-        }
-
-        // Error message banner
-        if (authError != null) {
-            item {
-                Card(
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Error,
-                            contentDescription = "Error",
-                            tint = Color(0xFFC62828),
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = authError ?: "",
-                            fontSize = 13.sp,
-                            color = Color(0xFFC62828),
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
-        }
-
-        // Main Auth Card Form
-        item {
-            Card(
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = CardSurfaceSand),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, OutlineSubtle, RoundedCornerShape(24.dp))
-            ) {
-                Column(
-                    modifier = Modifier.padding(22.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    if (!isSignUpMode) {
-                        // Sign In Form
-                        Text(
-                            text = "Log In to Your Trail Account",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextDark
-                        )
-                        Text(
-                            text = "Access your saved routes, trip squads, and community achievements.",
-                            fontSize = 13.sp,
-                            color = TextMuted
-                        )
-
-                        OutlinedTextField(
-                            value = emailInput,
-                            onValueChange = { emailInput = it },
-                            label = { Text("Email Address") },
-                            leadingIcon = {
-                                Icon(Icons.Default.Email, contentDescription = null, tint = TerracottaPrimary)
-                            },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = TerracottaPrimary,
-                                focusedLabelColor = TerracottaPrimary,
-                                unfocusedBorderColor = OutlineSubtle
-                            ),
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("email_input")
-                        )
-
-                        OutlinedTextField(
-                            value = passwordInput,
-                            onValueChange = { passwordInput = it },
-                            label = { Text("Password") },
-                            leadingIcon = {
-                                Icon(Icons.Default.Lock, contentDescription = null, tint = TerracottaPrimary)
-                            },
-                            trailingIcon = {
-                                IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                    Icon(
-                                        imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                        contentDescription = "Toggle password visibility",
-                                        tint = TextLightMuted
-                                    )
-                                }
-                            },
-                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = {
-                                focusManager.clearFocus()
-                                viewModel.login(emailInput, passwordInput)
-                            }),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = TerracottaPrimary,
-                                focusedLabelColor = TerracottaPrimary,
-                                unfocusedBorderColor = OutlineSubtle
-                            ),
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("password_input")
-                        )
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Button(
-                            onClick = {
-                                focusManager.clearFocus()
-                                viewModel.login(emailInput, passwordInput)
-                            },
-                            enabled = !isAuthLoading && emailInput.isNotBlank() && passwordInput.isNotBlank(),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = TerracottaPrimary),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(52.dp)
-                                .testTag("login_button")
-                        ) {
-                            if (isAuthLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(22.dp),
-                                    color = Color.White,
-                                    strokeWidth = 2.5.dp
-                                )
-                            } else {
-                                Text(
-                                    text = "Log In",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Icon(
-                                    imageVector = Icons.Default.ArrowForward,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                    } else {
-                        // Create Account Form
-                        Text(
-                            text = "Create Explorer Account",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextDark
-                        )
-                        Text(
-                            text = "Join the Biomate outdoor collective and connect with verified hikers.",
-                            fontSize = 13.sp,
-                            color = TextMuted
-                        )
-
-                        OutlinedTextField(
-                            value = nameInput,
-                            onValueChange = { nameInput = it },
-                            label = { Text("Full Name") },
-                            placeholder = { Text("e.g. Jordan Miller") },
-                            leadingIcon = {
-                                Icon(Icons.Default.AccountCircle, contentDescription = null, tint = TerracottaPrimary)
-                            },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = TerracottaPrimary,
-                                focusedLabelColor = TerracottaPrimary,
-                                unfocusedBorderColor = OutlineSubtle
-                            ),
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("reg_name_input")
-                        )
-
-                        OutlinedTextField(
-                            value = handleInput,
-                            onValueChange = { handleInput = it },
-                            label = { Text("Trail Handle") },
-                            placeholder = { Text("e.g. @jordan_climbs") },
-                            leadingIcon = {
-                                Icon(Icons.Default.Badge, contentDescription = null, tint = TerracottaPrimary)
-                            },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = TerracottaPrimary,
-                                focusedLabelColor = TerracottaPrimary,
-                                unfocusedBorderColor = OutlineSubtle
-                            ),
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("reg_handle_input")
-                        )
-
-                        OutlinedTextField(
-                            value = emailInput,
-                            onValueChange = { emailInput = it },
-                            label = { Text("Email Address") },
-                            placeholder = { Text("your.email@example.com") },
-                            leadingIcon = {
-                                Icon(Icons.Default.Email, contentDescription = null, tint = TerracottaPrimary)
-                            },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = TerracottaPrimary,
-                                focusedLabelColor = TerracottaPrimary,
-                                unfocusedBorderColor = OutlineSubtle
-                            ),
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("reg_email_input")
-                        )
-
-                        OutlinedTextField(
-                            value = passwordInput,
-                            onValueChange = { passwordInput = it },
-                            label = { Text("Password") },
-                            placeholder = { Text("Minimum 6 characters") },
-                            leadingIcon = {
-                                Icon(Icons.Default.Lock, contentDescription = null, tint = TerracottaPrimary)
-                            },
-                            visualTransformation = PasswordVisualTransformation(),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = TerracottaPrimary,
-                                focusedLabelColor = TerracottaPrimary,
-                                unfocusedBorderColor = OutlineSubtle
-                            ),
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("reg_password_input")
-                        )
-
-                        // Fitness Level Selector
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.FitnessCenter,
-                                    contentDescription = null,
-                                    tint = ForestGreenPrimary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Trail Fitness Level",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = TextDark
-                                )
-                            }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                listOf("Beginner", "Moderate", "Advanced", "Endurance").forEach { level ->
-                                    val isSelected = selectedFitness == level
-                                    FilterChip(
-                                        selected = isSelected,
-                                        onClick = { selectedFitness = level },
-                                        label = { Text(level, fontSize = 11.sp, fontWeight = FontWeight.Medium) },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = ForestGreenPrimary,
-                                            selectedLabelColor = Color.White
-                                        ),
-                                        shape = RoundedCornerShape(12.dp)
-                                    )
-                                }
-                            }
-                        }
-
-                        // Preferred Pace Selector
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Speed,
-                                    contentDescription = null,
-                                    tint = AmberSunrise,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Preferred Pace",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = TextDark
-                                )
-                            }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                listOf(
-                                    "Leisurely (3 km/h)",
-                                    "Moderate (4.5 km/h)",
-                                    "Fast (6 km/h)"
-                                ).forEach { pace ->
-                                    val isSelected = selectedPace.startsWith(pace.take(4))
-                                    FilterChip(
-                                        selected = isSelected,
-                                        onClick = { selectedPace = pace },
-                                        label = { Text(pace, fontSize = 11.sp, fontWeight = FontWeight.Medium) },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = AmberSunrise,
-                                            selectedLabelColor = Color.White
-                                        ),
-                                        shape = RoundedCornerShape(12.dp)
-                                    )
-                                }
-                            }
-                        }
-
-                        // Bio Input
-                        OutlinedTextField(
-                            value = bioInput,
-                            onValueChange = { bioInput = it },
-                            label = { Text("About Your Outdoor Experience") },
-                            placeholder = { Text("e.g. Love alpine hikes and photography...") },
-                            maxLines = 3,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = TerracottaPrimary,
-                                focusedLabelColor = TerracottaPrimary,
-                                unfocusedBorderColor = OutlineSubtle
-                            ),
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("reg_bio_input")
-                        )
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Button(
-                            onClick = {
-                                focusManager.clearFocus()
-                                viewModel.register(
-                                    name = nameInput.ifBlank { "Explorer" },
-                                    email = emailInput,
-                                    password = passwordInput,
-                                    handle = handleInput.ifBlank { "@explorer" },
-                                    fitnessLevel = selectedFitness,
-                                    preferredPace = selectedPace,
-                                    bio = bioInput
-                                )
-                            },
-                            enabled = !isAuthLoading && nameInput.isNotBlank() && emailInput.isNotBlank() && passwordInput.length >= 4,
-                            shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = TerracottaPrimary),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(52.dp)
-                                .testTag("register_button")
-                        ) {
-                            if (isAuthLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(22.dp),
-                                    color = Color.White,
-                                    strokeWidth = 2.5.dp
-                                )
-                            } else {
-                                Text(
-                                    text = "Create Account & Start Exploring",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Demo / Switch Profiles Section
-        item {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(1.dp)
-                            .background(OutlineSubtle)
-                    )
+                Column(Modifier.padding(24.dp)) {
                     Text(
-                        text = "  OR INSTANT LOGIN WITH AN EXPLORER PROFILE  ",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextLightMuted,
-                        letterSpacing = 0.5.sp
+                        text = when (mode) {
+                            AuthMode.SIGN_IN -> "Welcome back"
+                            AuthMode.REGISTER -> "Create your account"
+                            AuthMode.RESET -> "Reset your password"
+                        },
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(1.dp)
-                            .background(OutlineSubtle)
+                    Spacer(Modifier.height(20.dp))
+
+                    if (mode == AuthMode.REGISTER) {
+                        LabelledField(
+                            label = "Display name",
+                            value = displayName,
+                            onValueChange = { displayName = it },
+                            error = nameError,
+                            imeAction = ImeAction.Next,
+                            onImeAction = {}
+                        )
+                        Spacer(Modifier.height(16.dp))
+                    }
+
+                    LabelledField(
+                        label = "Email",
+                        value = email,
+                        onValueChange = { email = it },
+                        error = emailError,
+                        keyboardType = KeyboardType.Email,
+                        imeAction = ImeAction.Next,
+                        onImeAction = {}
                     )
-                }
 
-                Text(
-                    text = "Select any verified profile to test different hiker personas:",
-                    fontSize = 12.sp,
-                    color = TextMuted,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    allAccounts.forEach { account ->
-                        QuickAccountCard(
-                            account = account,
-                            onClick = {
-                                emailInput = account.email
-                                passwordInput = account.password
-                                viewModel.quickSwitchAccount(account.id)
-                            }
+                    if (mode != AuthMode.RESET) {
+                        Spacer(Modifier.height(16.dp))
+                        LabelledField(
+                            label = "Password",
+                            value = password,
+                            onValueChange = { password = it },
+                            error = passwordError,
+                            keyboardType = KeyboardType.Password,
+                            imeAction = ImeAction.Done,
+                            onImeAction = { submit() },
+                            visualTransformation = if (passwordVisible) {
+                                VisualTransformation.None
+                            } else {
+                                PasswordVisualTransformation()
+                            },
+                            trailing = {
+                                IconButton(
+                                    onClick = { passwordVisible = !passwordVisible },
+                                    modifier = Modifier.size(48.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (passwordVisible) {
+                                            Icons.Filled.VisibilityOff
+                                        } else {
+                                            Icons.Filled.Visibility
+                                        },
+                                        contentDescription = if (passwordVisible) {
+                                            "Hide password"
+                                        } else {
+                                            "Show password"
+                                        }
+                                    )
+                                }
+                            },
+                            supporting = if (mode == AuthMode.REGISTER) {
+                                "At least 8 characters, with a letter and a number."
+                            } else null
                         )
                     }
+
+                    AnimatedVisibility(visible = formError != null) {
+                        Column {
+                            Spacer(Modifier.height(16.dp))
+                            Surface(
+                                color = MaterialTheme.colorScheme.errorContainer,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = formError.orEmpty(),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.padding(12.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    AnimatedVisibility(visible = notice != null) {
+                        Column {
+                            Spacer(Modifier.height(16.dp))
+                            Surface(
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = notice.orEmpty(),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.padding(12.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(24.dp))
+
+                    Button(
+                        onClick = ::submit,
+                        // Disabled while the request is in flight so a double tap cannot
+                        // create two accounts.
+                        enabled = canSubmit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .defaultMinSize(minHeight = 52.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        if (isSubmitting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .semantics { contentDescription = "Working" },
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(Modifier.width(12.dp))
+                        }
+                        Text(
+                            text = when {
+                                isSubmitting && mode == AuthMode.SIGN_IN -> "Signing in…"
+                                isSubmitting && mode == AuthMode.REGISTER -> "Creating account…"
+                                isSubmitting -> "Sending…"
+                                mode == AuthMode.SIGN_IN -> "Sign in"
+                                mode == AuthMode.REGISTER -> "Create account"
+                                else -> "Send reset link"
+                            },
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Row2 {
+                        when (mode) {
+                            AuthMode.SIGN_IN -> {
+                                TextButton(onClick = { mode = AuthMode.REGISTER }) {
+                                    Text("Create an account")
+                                }
+                                TextButton(onClick = { mode = AuthMode.RESET }) {
+                                    Text("Forgot password?")
+                                }
+                            }
+                            AuthMode.REGISTER -> TextButton(onClick = { mode = AuthMode.SIGN_IN }) {
+                                Text("I already have an account")
+                            }
+                            AuthMode.RESET -> TextButton(onClick = { mode = AuthMode.SIGN_IN }) {
+                                Text("Back to sign in")
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!viewModel.isFirebaseConfigured) {
+                Spacer(Modifier.height(20.dp))
+                DevelopmentAccountsCard(
+                    onUse = { devEmail ->
+                        mode = AuthMode.SIGN_IN
+                        email = devEmail
+                        password = SeedUsers.DEV_PASSWORD
+                    }
+                )
+            }
+
+            Spacer(Modifier.height(32.dp))
+        }
+    }
+}
+
+/**
+ * Surfaces the demo logins so the app can be evaluated without inventing an account.
+ *
+ * Shown only when running on the local backend — a Firebase-configured build has no demo
+ * credentials to offer, and advertising these against a real project would be a hole.
+ */
+@Composable
+private fun DevelopmentAccountsCard(onUse: (String) -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(20.dp)) {
+            Text(
+                "Development build",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "No Firebase project is configured, so accounts and data stay on this device. " +
+                    "Two demo accounts are ready — sign in as both to try the multi-user flow.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(12.dp))
+            SeedUsers.developmentLogins.forEach { (devEmail, seed) ->
+                TextButton(
+                    onClick = { onUse(devEmail) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 48.dp)
+                ) {
+                    Text(
+                        "${seed.profile.displayName} · $devEmail",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
             }
         }
     }
 }
 
+/**
+ * A text field with a real `<label>` equivalent above it.
+ *
+ * The label is a separate `Text`, not a placeholder: a placeholder disappears the moment
+ * someone types, leaving no way to recall what the field was for.
+ */
 @Composable
-fun QuickAccountCard(
-    account: UserAccount,
-    onClick: () -> Unit
+private fun LabelledField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    error: String?,
+    modifier: Modifier = Modifier,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    imeAction: ImeAction = ImeAction.Next,
+    onImeAction: () -> Unit = {},
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    trailing: (@Composable () -> Unit)? = null,
+    supporting: String? = null
 ) {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = CardSurfaceSand),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, OutlineSubtle, RoundedCornerShape(16.dp))
-            .clickable { onClick() }
-            .testTag("account_card_${account.id}")
-    ) {
-        Row(
+    Column(modifier.fillMaxWidth()) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(6.dp))
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            isError = error != null,
+            visualTransformation = visualTransformation,
+            trailingIcon = trailing,
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
+            keyboardActions = KeyboardActions(
+                onDone = { onImeAction() },
+                onNext = { onImeAction() }
+            ),
+            shape = RoundedCornerShape(14.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(Color(account.avatarColorHex)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = account.avatarInitials,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        fontSize = 16.sp
-                    )
+                .defaultMinSize(minHeight = 56.dp)
+                .semantics { contentDescription = label }
+        )
+        // Error text carries an icon-free but explicit message; colour alone never
+        // signals the problem.
+        val helper = error ?: supporting
+        if (helper != null) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = if (error != null) "⚠ $error" else helper,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (error != null) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
                 }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = account.name,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = TextDark
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = account.handle,
-                            fontSize = 11.sp,
-                            color = TextMuted
-                        )
-                    }
-
-                    Text(
-                        text = "${account.fitnessLevel} • ${account.preferredVibe}",
-                        fontSize = 12.sp,
-                        color = TextLightMuted,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = SurfaceVariantSand,
-                modifier = Modifier.padding(start = 8.dp)
-            ) {
-                Text(
-                    text = "Sign In",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TerracottaPrimary,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                )
-            }
+            )
         }
     }
+}
+
+/** Small helper so the mode-switch links wrap sensibly on narrow screens. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun Row2(content: @Composable () -> Unit) {
+    androidx.compose.foundation.layout.FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalArrangement = Arrangement.Center
+    ) { content() }
 }

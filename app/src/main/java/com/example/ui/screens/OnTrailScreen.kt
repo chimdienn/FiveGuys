@@ -1,50 +1,35 @@
 package com.example.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddAlert
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.CompassCalibration
-import androidx.compose.material.icons.filled.DirectionsWalk
-import androidx.compose.material.icons.filled.LocalFlorist
-import androidx.compose.material.icons.filled.North
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.ThumbUp
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.filled.WaterDrop
-import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,489 +38,676 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import com.example.data.model.Trail
-import com.example.data.model.TrailMoment
-import com.example.ui.BiomateScreen
-import com.example.ui.BiomateViewModel
-import com.example.ui.components.ElevationProfileView
-import com.example.ui.components.StatusBadge
-import com.example.ui.components.TopographicMapSimulation
-import com.example.ui.theme.AmberContainer
-import com.example.ui.theme.AmberSunrise
-import com.example.ui.theme.ForestGreenContainer
-import com.example.ui.theme.ForestGreenPrimary
-import com.example.ui.theme.OnForestGreenContainer
-import com.example.ui.theme.TerracottaContainer
-import com.example.ui.theme.TerracottaPrimary
-import com.example.ui.theme.TextDark
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.domain.model.GeoPoint
+import com.example.domain.model.MomentCategory
+import com.example.domain.weather.TrailRanking
+import com.example.ui.components.BiomateProgressBar
+import com.example.ui.components.EmptyState
+import com.example.ui.components.SafetyNotice
+import com.example.ui.components.VSpace
+import com.example.ui.viewmodel.LocationUiState
+import com.example.ui.viewmodel.OnTrailViewModel
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.MarkerState
+import com.google.maps.android.compose.Polyline
+import com.google.maps.android.compose.rememberCameraPositionState
 
+/**
+ * OnTrail: the live map, tracking and Trail Moments.
+ *
+ * This is the screen that replaced the prototype's fake GPS — a coroutine that added a
+ * random elevation every two seconds. Everything here comes from the fused location
+ * provider: the marker, the distance, and the position a Trail Moment is pinned to.
+ *
+ * Tracking is foreground only. Leaving the app stops the updates, which is stated plainly
+ * rather than implied.
+ */
 @Composable
 fun OnTrailScreen(
-    viewModel: BiomateViewModel,
-    modifier: Modifier = Modifier
+    trailId: String?,
+    tripId: String?,
+    viewModel: OnTrailViewModel,
+    onBack: () -> Unit,
+    onFinished: () -> Unit
 ) {
-    val allTrails by viewModel.allTrails.collectAsState()
-    val selectedTrailId by viewModel.selectedTrailId.collectAsState()
-    val allMoments by viewModel.allMoments.collectAsState()
+    val trail by viewModel.trail.collectAsStateWithLifecycle()
+    val session by viewModel.activeSession.collectAsStateWithLifecycle()
+    val locationState by viewModel.locationState.collectAsStateWithLifecycle()
+    val distanceKm by viewModel.distanceKm.collectAsStateWithLifecycle()
+    val elapsedSeconds by viewModel.elapsedSeconds.collectAsStateWithLifecycle()
+    val progress by viewModel.routeProgress.collectAsStateWithLifecycle()
+    val moments by viewModel.moments.collectAsStateWithLifecycle()
+    val categoryFilter by viewModel.categoryFilter.collectAsStateWithLifecycle()
+    val summary by viewModel.summary.collectAsStateWithLifecycle()
+    val isFinishing by viewModel.isFinishing.collectAsStateWithLifecycle()
 
-    val isOnTrailActive by viewModel.isOnTrailActive.collectAsState()
-    val progressPercent by viewModel.trailProgressPercent.collectAsState()
-    val currentElevation by viewModel.currentElevationM.collectAsState()
-    val speedKmh by viewModel.currentSpeedKmh.collectAsState()
-    val elapsedSeconds by viewModel.elapsedTimeSeconds.collectAsState()
-    val isSosActive by viewModel.isSosActive.collectAsState()
+    var showAddMoment by remember { mutableStateOf(false) }
+    var showFinishConfirm by remember { mutableStateOf(false) }
+    var showTrailInfo by remember { mutableStateOf(false) }
 
-    var showReportDialog by remember { mutableStateOf(false) }
-
-    val currentTrail: Trail = allTrails.firstOrNull { it.id == selectedTrailId }
-        ?: allTrails.firstOrNull()
-        ?: return
-
-    val currentDistanceCovered = (currentTrail.distanceKm * (progressPercent / 100.0)).let {
-        String.format("%.1f", it)
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { granted ->
+        viewModel.onPermissionResult(
+            granted[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                granted[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        )
     }
 
-    val hours = elapsedSeconds / 3600
-    val minutes = (elapsedSeconds % 3600) / 60
-    val seconds = elapsedSeconds % 60
-    val timeFormatted = String.format("%02d:%02d:%02d", hours, minutes, seconds)
+    LaunchedEffect(trailId) {
+        trailId?.let(viewModel::previewTrail)
+    }
 
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        // Active Trail Banner
-        item {
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(10.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isOnTrailActive) Color(0xFF43A047) else AmberSunrise)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (isOnTrailActive) "LIVE ONTRAIL HUD" else "ONTRAIL PAUSED",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = if (isOnTrailActive) Color(0xFF2E7D32) else AmberSunrise
+    // Asks on entry rather than on the first "Add Moment" tap, so the map can show the
+    // user's position from the outset.
+    LaunchedEffect(Unit) {
+        if (locationState is LocationUiState.Idle) {
+            permissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }
+    }
+
+    val currentTrail = trail
+    val isTracking = session != null
+
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            Box(Modifier.weight(1f)) {
+                when (locationState) {
+                    LocationUiState.PermissionRequired -> LocationPermissionExplainer(
+                        onGrant = {
+                            permissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                )
                             )
                         }
+                    )
 
-                        // Navigation pause/resume
-                        IconButton(
-                            onClick = { viewModel.pauseOrResumeOnTrail() },
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(ForestGreenContainer)
-                                .testTag("pause_resume_ontrail_button")
+                    else -> TrailMap(
+                        routePoints = currentTrail?.route.orEmpty(),
+                        currentPoint = (locationState as? LocationUiState.Available)?.fix?.point,
+                        moments = moments,
+                        onMomentSelected = {}
+                    )
+                }
+
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier
+                        .padding(12.dp)
+                        .size(48.dp)
+                ) {
+                    Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surface) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                }
+
+                if (locationState is LocationUiState.WaitingForFix) {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 16.dp)
+                    ) {
+                        Text(
+                            "Waiting for GPS…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                        )
+                    }
+                }
+
+                // Category filters sit over the map so they are reachable without
+                // scrolling away from what they filter.
+                LazyRow(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(bottom = 12.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    item {
+                        MapFilterChip("All", categoryFilter == null) {
+                            viewModel.setCategoryFilter(null)
+                        }
+                    }
+                    items(MomentCategory.entries) { category ->
+                        MapFilterChip(
+                            "${categoryEmoji(category)} ${category.label}",
+                            categoryFilter == category
                         ) {
-                            Icon(
-                                imageVector = if (isOnTrailActive) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = "Pause or Resume",
-                                tint = ForestGreenPrimary
+                            viewModel.setCategoryFilter(
+                                if (categoryFilter == category) null else category
                             )
                         }
                     }
+                }
+            }
 
-                    Spacer(modifier = Modifier.height(4.dp))
-
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(20.dp)) {
                     Text(
-                        text = currentTrail.title,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        currentTrail?.name ?: "Choose a trail",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
 
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Progress Bar
-                    LinearProgressIndicator(
-                        progress = { progressPercent / 100f },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp)),
-                        color = ForestGreenPrimary,
-                        trackColor = ForestGreenContainer
-                    )
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
+                    VSpace(14)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(
-                            text = "$currentDistanceCovered km of ${currentTrail.distanceKm} km completed",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = ForestGreenPrimary
-                        )
-                        Text(
-                            text = "$progressPercent%",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = TerracottaPrimary
+                        AdventureStat(formatDuration(elapsedSeconds), "Elapsed")
+                        AdventureStat("${"%.2f".format(distanceKm)} km", "Travelled")
+                        AdventureStat(
+                            // Shows "—" rather than a fabricated number when the route is
+                            // unmapped or the walker is far from it.
+                            progress?.let { "${it.percent}%" } ?: "—",
+                            "Along route"
                         )
                     }
-                }
-            }
-        }
 
-        // Live Topographic Map Simulation
-        item {
-            TopographicMapSimulation(
-                trailPoints = currentTrail.routeWaypoints,
-                progressPercent = progressPercent,
-                isNavigating = isOnTrailActive
-            )
-        }
+                    progress?.let {
+                        VSpace(12)
+                        BiomateProgressBar(
+                            progress = it.fraction.toFloat(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            contentDescription = "${it.percent} percent along the route"
+                        )
+                        if (it.offRouteMeters > 100) {
+                            VSpace(6)
+                            Text(
+                                "You are about ${it.offRouteMeters.toInt()} m from the mapped route.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
 
-        // HUD Metrics Grid (Speed, Elevation, Time, Compass)
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                HudMetricCard(
-                    title = "SPEED",
-                    value = "$speedKmh",
-                    unit = "km/h",
-                    modifier = Modifier.weight(1f)
-                )
-                HudMetricCard(
-                    title = "ELEVATION",
-                    value = "$currentElevation",
-                    unit = "meters",
-                    modifier = Modifier.weight(1f)
-                )
-                HudMetricCard(
-                    title = "ELAPSED",
-                    value = timeFormatted,
-                    unit = "time",
-                    modifier = Modifier.weight(1.2f)
-                )
-            }
-        }
-
-        // Action Quick Bar: Report Moment, PhotoScan, SOS Beacon
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = { showReportDialog = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = TerracottaPrimary),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .weight(1.2f)
-                        .height(48.dp)
-                        .testTag("report_moment_button")
-                ) {
-                    Icon(Icons.Default.AddAlert, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Report Hazard / Moment", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-
-                OutlinedButton(
-                    onClick = { viewModel.navigateTo(BiomateScreen.PHOTO_SCAN) },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .weight(0.8f)
-                        .height(48.dp)
-                ) {
-                    Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("PhotoScan", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-
-        // Live Trail Moments & Hazard Reports
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Live Trail Conditions & Discoveries",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                )
-                Text(
-                    text = "Updated 2m ago",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        items(allMoments) { moment ->
-            TrailMomentCard(
-                moment = moment,
-                onUpvote = { viewModel.upvoteMoment(moment) }
-            )
-        }
-
-        // Post-trip story generator action
-        item {
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = ForestGreenContainer),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Finished your hike? Generate Adventure Story!",
-                        fontWeight = FontWeight.Bold,
-                        color = OnForestGreenContainer,
-                        fontSize = 14.sp
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Summarize today's highlights, species spotted, companion stats, and elevation milestones with AI.",
-                        fontSize = 11.sp,
-                        color = OnForestGreenContainer.copy(alpha = 0.85f)
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Button(
-                        onClick = { viewModel.createAdventureStoryForActiveTrip() },
-                        colors = ButtonDefaults.buttonColors(containerColor = ForestGreenPrimary),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("generate_story_button")
-                    ) {
-                        Text("Create Adventure Story & Recap", fontWeight = FontWeight.Bold)
+                    VSpace(18)
+                    if (isTracking) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedButton(
+                                onClick = { showAddMoment = true },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .defaultMinSize(minHeight = 52.dp),
+                                shape = RoundedCornerShape(16.dp)
+                            ) { Text("Add moment") }
+                            Button(
+                                onClick = { showFinishConfirm = true },
+                                enabled = !isFinishing,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .defaultMinSize(minHeight = 52.dp),
+                                shape = RoundedCornerShape(16.dp)
+                            ) { Text(if (isFinishing) "Finishing…" else "Finish") }
+                        }
+                        VSpace(8)
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            TextButton(
+                                onClick = { showTrailInfo = true },
+                                modifier = Modifier.weight(1f)
+                            ) { Text("Trail info") }
+                            TextButton(
+                                onClick = viewModel::abandonAdventure,
+                                modifier = Modifier.weight(1f)
+                            ) { Text("Discard", color = MaterialTheme.colorScheme.error) }
+                        }
+                    } else {
+                        Button(
+                            onClick = { trailId?.let { viewModel.startAdventure(it, tripId) } },
+                            enabled = trailId != null,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .defaultMinSize(minHeight = 52.dp),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Text("Start adventure", style = MaterialTheme.typography.titleMedium)
+                        }
+                        VSpace(8)
+                        Text(
+                            "Tracking runs while Biomate is open. It stops if you close the app.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
         }
     }
 
-    if (showReportDialog) {
-        ReportMomentDialog(
-            trailId = currentTrail.id,
-            onDismiss = { showReportDialog = false },
-            onSubmit = { type, title, desc, km, warn ->
-                viewModel.reportTrailMoment(type, title, desc, km, warn)
-                showReportDialog = false
+    if (showAddMoment) {
+        AddMomentDialog(
+            hasLocation = locationState is LocationUiState.Available,
+            onAdd = { category, description ->
+                viewModel.addMoment(category, description)
+                showAddMoment = false
+            },
+            onDismiss = { showAddMoment = false }
+        )
+    }
+
+    if (showFinishConfirm) {
+        AlertDialog(
+            onDismissRequest = { showFinishConfirm = false },
+            title = { Text("Finish this adventure?") },
+            text = {
+                Text(
+                    "We'll record ${"%.2f".format(distanceKm)} km over " +
+                        "${formatDuration(elapsedSeconds)}, stop tracking your location, " +
+                        "and work out any challenges you completed."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showFinishConfirm = false
+                    viewModel.finishAdventure()
+                }) { Text("Finish") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFinishConfirm = false }) { Text("Keep walking") }
+            }
+        )
+    }
+
+    if (showTrailInfo && currentTrail != null) {
+        AlertDialog(
+            onDismissRequest = { showTrailInfo = false },
+            title = { Text(currentTrail.name) },
+            text = {
+                Column {
+                    Text(currentTrail.description, style = MaterialTheme.typography.bodyMedium)
+                    VSpace(12)
+                    Text(
+                        "${"%.1f".format(currentTrail.distanceKm)} km · " +
+                            "↑${currentTrail.elevationGainM} m · " +
+                            "${currentTrail.estimatedDurationLabel} · " +
+                            currentTrail.difficulty.label,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    VSpace(12)
+                    SafetyNotice(TrailRanking.SAFETY_DISCLAIMER)
+                }
+            },
+            confirmButton = { TextButton(onClick = { showTrailInfo = false }) { Text("Close") } }
+        )
+    }
+
+    summary?.let { adventureSummary ->
+        AdventureCompleteDialog(
+            summary = adventureSummary,
+            onDismiss = {
+                viewModel.dismissSummary()
+                onFinished()
             }
         )
     }
 }
 
 @Composable
-private fun HudMetricCard(
-    title: String,
-    value: String,
-    unit: String,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        modifier = modifier
-    ) {
-        Column(
-            modifier = Modifier.padding(10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(text = title, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(text = value, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = ForestGreenPrimary)
-            Text(text = unit, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+private fun AdventureStat(value: String, label: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            value,
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
+/**
+ * Formats elapsed time for the live stats panel.
+ *
+ * Seconds are shown below an hour so the timer visibly moves from the moment tracking
+ * starts — a readout stuck on "0m" for the first minute looks broken.
+ */
+private fun formatDuration(totalSeconds: Long): String {
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+    return when {
+        hours > 0 -> "${hours}h ${minutes}m"
+        else -> "${minutes}m ${seconds.toString().padStart(2, '0')}s"
+    }
+}
+
+/**
+ * The map itself.
+ *
+ * Draws the trail polyline, the community moments, and the user's own position. The
+ * camera follows the walker only until they touch the map — hijacking the camera while
+ * someone is looking ahead at the route is infuriating, so `hasMovedCamera` latches once
+ * an initial position is framed.
+ */
 @Composable
-fun TrailMomentCard(
-    moment: TrailMoment,
-    onUpvote: () -> Unit
+private fun TrailMap(
+    routePoints: List<GeoPoint>,
+    currentPoint: GeoPoint?,
+    moments: List<com.example.domain.model.TrailMoment>,
+    onMomentSelected: (com.example.domain.model.TrailMoment) -> Unit
 ) {
-    Card(
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (moment.warningLevel == "CAUTION" || moment.warningLevel == "DANGER")
-                Color(0xFFFFF3E0)
-            else
-                MaterialTheme.colorScheme.surface
+    val cameraPositionState = rememberCameraPositionState()
+    var hasFramed by remember { mutableStateOf(false) }
+
+    val focus = currentPoint ?: routePoints.firstOrNull()
+    LaunchedEffect(focus) {
+        if (!hasFramed && focus != null) {
+            cameraPositionState.position = CameraPosition.fromLatLngZoom(
+                LatLng(focus.latitude, focus.longitude),
+                14f
+            )
+            hasFramed = true
+        }
+    }
+
+    GoogleMap(
+        modifier = Modifier.fillMaxSize(),
+        cameraPositionState = cameraPositionState,
+        properties = MapProperties(
+            // The blue dot is drawn by the SDK only when permission is held; the app's own
+            // marker below is what the tracking logic actually uses.
+            isMyLocationEnabled = false,
+            mapType = com.google.maps.android.compose.MapType.TERRAIN
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        modifier = Modifier.fillMaxWidth()
+        uiSettings = MapUiSettings(
+            zoomControlsEnabled = false,
+            myLocationButtonEnabled = false,
+            mapToolbarEnabled = false
+        )
     ) {
-        Row(
-            modifier = Modifier
-                .padding(12.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                verticalAlignment = Alignment.Top,
-                modifier = Modifier.weight(1f)
-            ) {
-                val icon = when (moment.type) {
-                    "HAZARD_SNAKE" -> Icons.Default.Warning
-                    "HAZARD_BLOCKED" -> Icons.Default.Warning
-                    "WATER_SOURCE" -> Icons.Default.WaterDrop
-                    "WILDFLOWER" -> Icons.Default.LocalFlorist
-                    else -> Icons.Default.WbSunny
-                }
-                val iconTint = when (moment.warningLevel) {
-                    "CAUTION" -> Color(0xFFE65100)
-                    "DANGER" -> Color(0xFFC62828)
-                    else -> ForestGreenPrimary
-                }
+        if (routePoints.size >= 2) {
+            Polyline(
+                points = routePoints.map { LatLng(it.latitude, it.longitude) },
+                color = Color(0xFFCD744C),
+                width = 12f
+            )
+            Marker(
+                state = MarkerState(
+                    LatLng(routePoints.first().latitude, routePoints.first().longitude)
+                ),
+                title = "Start"
+            )
+            Marker(
+                state = MarkerState(
+                    LatLng(routePoints.last().latitude, routePoints.last().longitude)
+                ),
+                title = "End"
+            )
+        }
 
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(iconTint.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(18.dp))
+        moments.forEach { moment ->
+            Marker(
+                state = MarkerState(LatLng(moment.latitude, moment.longitude)),
+                title = "${categoryEmoji(moment.category)} ${moment.category.label}",
+                snippet = moment.description.take(80),
+                onClick = {
+                    onMomentSelected(moment)
+                    false
                 }
+            )
+        }
 
-                Spacer(modifier = Modifier.width(10.dp))
-
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = moment.title, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "km ${moment.kmMarker}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Text(text = moment.description, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
-                    Row(
-                        modifier = Modifier.padding(top = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(text = "Reported by ${moment.reportedBy} • ${moment.timeAgo}", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-
-            // Upvote Button
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable { onUpvote() }
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.ThumbUp, contentDescription = "Upvote", modifier = Modifier.size(12.dp), tint = ForestGreenPrimary)
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(text = "${moment.upvotes}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ForestGreenPrimary)
-                }
-            }
+        currentPoint?.let { point ->
+            Marker(
+                state = MarkerState(LatLng(point.latitude, point.longitude)),
+                title = "You are here"
+            )
         }
     }
 }
 
 @Composable
-fun ReportMomentDialog(
-    trailId: String,
-    onDismiss: () -> Unit,
-    onSubmit: (type: String, title: String, desc: String, km: Double, warn: String) -> Unit
+private fun MapFilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label, style = MaterialTheme.typography.bodyMedium) },
+        leadingIcon = if (selected) {
+            { Text("✓", style = MaterialTheme.typography.bodyMedium) }
+        } else null,
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier.defaultMinSize(minHeight = 44.dp)
+    )
+}
+
+/**
+ * Explains why the app wants location before asking again.
+ *
+ * A bare second permission prompt after a denial is usually denied again. Saying what the
+ * permission buys — and, just as importantly, that the location is not broadcast — is the
+ * only honest way to ask twice (spec section 72).
+ */
+@Composable
+private fun LocationPermissionExplainer(onGrant: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text("📍", style = MaterialTheme.typography.displayLarge)
+        VSpace(16)
+        Text(
+            "Biomate needs your location",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        VSpace(12)
+        Text(
+            "Biomate uses your location during an adventure to show where you are relative " +
+                "to the trail and to create Trail Moments.\n\n" +
+                "Your location is not automatically shared publicly, and tracking stops when " +
+                "you leave the app.",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+        VSpace(28)
+        Button(
+            onClick = onGrant,
+            modifier = Modifier.defaultMinSize(minHeight = 52.dp),
+            shape = RoundedCornerShape(16.dp)
+        ) { Text("Allow location", style = MaterialTheme.typography.titleMedium) }
+        VSpace(10)
+        Text(
+            "If you previously chose \"Don't allow\", you'll need to enable location for " +
+                "Biomate in Android Settings.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+    }
+}
+
+/**
+ * Creating a Trail Moment.
+ *
+ * Disabled without a location fix, with the reason stated. A moment whose coordinates are
+ * a guess is worse than no moment (spec section 34).
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun AddMomentDialog(
+    hasLocation: Boolean,
+    onAdd: (MomentCategory, String) -> Unit,
+    onDismiss: () -> Unit
 ) {
-    var type by remember { mutableStateOf("HAZARD_SNAKE") }
-    var title by remember { mutableStateOf("Snake sighted near rock path") }
-    var desc by remember { mutableStateOf("Red-bellied black snake basking on warm granite rock. Watch your step.") }
-    var kmMarker by remember { mutableStateOf("12.3") }
-    var warningLevel by remember { mutableStateOf("CAUTION") }
+    var category by remember { mutableStateOf(MomentCategory.NOTE) }
+    var description by remember { mutableStateOf("") }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Leave a Trail Moment") },
+        text = {
+            Column {
+                if (!hasLocation) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            "Waiting for a GPS fix. A moment is pinned to where you actually are, " +
+                                "so it can't be created yet.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                    VSpace(12)
+                }
+
                 Text(
-                    text = "Report Trail Condition / Discovery",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    "What kind of thing?",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                VSpace(8)
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    MomentCategory.entries.forEach { option ->
+                        FilterChip(
+                            selected = category == option,
+                            onClick = { category = option },
+                            label = { Text("${categoryEmoji(option)} ${option.label}") },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.defaultMinSize(minHeight = 44.dp)
+                        )
+                    }
+                }
 
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Title") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                VSpace(16)
+                androidx.compose.material3.OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    minLines = 2,
+                    label = { Text("What did you see?") },
+                    placeholder = { Text("Tree down across the track just past the saddle") },
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics { contentDescription = "Trail moment description" }
                 )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onAdd(category, description) },
+                enabled = hasLocation && description.isNotBlank()
+            ) { Text("Share") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
 
-                OutlinedTextField(
-                    value = desc,
-                    onValueChange = { desc = it },
-                    label = { Text("Description & Instructions") },
-                    maxLines = 3,
-                    modifier = Modifier.fillMaxWidth()
+/** The post-adventure summary: distance, time, company, and what it earned. */
+@Composable
+private fun AdventureCompleteDialog(
+    summary: com.example.ui.viewmodel.AdventureSummary,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Adventure complete 🎉") },
+        text = {
+            Column {
+                Text(
+                    summary.trailName,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
-
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = kmMarker,
-                        onValueChange = { kmMarker = it },
-                        label = { Text("Km Marker") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
+                VSpace(14)
+                Text(
+                    "${"%.2f".format(summary.session.distanceKm)} km",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Text(
+                    formatDuration(summary.session.durationMinutes * 60),
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                if (summary.companionCount > 0) {
+                    Text(
+                        "${summary.companionCount} ${if (summary.companionCount == 1) "companion" else "companions"}",
+                        style = MaterialTheme.typography.bodyLarge
                     )
-
-                    OutlinedTextField(
-                        value = warningLevel,
-                        onValueChange = { warningLevel = it },
-                        label = { Text("Warning Level (INFO/CAUTION/DANGER)") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1.5f)
+                }
+                if (summary.momentCount > 0) {
+                    Text(
+                        "${summary.momentCount} trail moments",
+                        style = MaterialTheme.typography.bodyLarge
                     )
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    OutlinedButton(onClick = onDismiss) { Text("Cancel") }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            onSubmit(type, title, desc, kmMarker.toDoubleOrNull() ?: 5.0, warningLevel)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = TerracottaPrimary),
-                        modifier = Modifier.testTag("submit_report_button")
-                    ) {
-                        Text("Broadcast")
+                if (summary.coinsAwarded > 0) {
+                    VSpace(16)
+                    Text(
+                        "+${summary.coinsAwarded} BioCoins",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    summary.challengesCompleted.forEach {
+                        Text(
+                            "• ${it.challenge.title}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                if (summary.badgesEarned.isNotEmpty()) {
+                    VSpace(16)
+                    Text(
+                        "New badges",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    summary.badgesEarned.forEach { badgeId ->
+                        val badge = com.example.domain.badge.BadgeRules.byId(badgeId)
+                        Text(
+                            "${badge.emoji} ${badge.title}",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 }
             }
-        }
-    }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } }
+    )
 }
