@@ -1,7 +1,6 @@
 ﻿package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -45,7 +44,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -55,7 +53,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.R
 import com.example.data.auth.LocalAuthRepository
 import com.example.data.seed.SeedUsers
 import com.example.ui.theme.GradientTerracottaEnd
@@ -143,23 +140,9 @@ fun AuthScreen(viewModel: SessionViewModel) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(Modifier.height(24.dp))
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier.size(108.dp)
-            ) {
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surface, modifier = Modifier.size(84.dp)) {
                 Box(contentAlignment = Alignment.Center) {
-                    // Reuse the exact vector artwork used by the Android launcher icon.
-                    Image(
-                        painter = painterResource(R.drawable.ic_launcher_background),
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    Image(
-                        painter = painterResource(R.drawable.ic_launcher_foreground),
-                        contentDescription = "Biomate logo",
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    Text("ðŸ¥¾", style = MaterialTheme.typography.displayMedium)
                 }
             }
             Spacer(Modifier.height(20.dp))
@@ -486,5 +469,4 @@ private fun Row2(content: @Composable () -> Unit) {
         verticalArrangement = Arrangement.Center
     ) { content() }
 }
-
 

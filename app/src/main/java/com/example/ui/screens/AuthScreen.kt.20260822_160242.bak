@@ -1,7 +1,6 @@
-﻿package com.example.ui.screens
+package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -45,7 +44,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -55,12 +53,14 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.R
 import com.example.data.auth.LocalAuthRepository
 import com.example.data.seed.SeedUsers
 import com.example.ui.theme.GradientTerracottaEnd
 import com.example.ui.theme.GradientTerracottaStart
+import com.example.ui.components.ChibiAvatar
+import com.example.ui.components.ChibiMotion
 import com.example.ui.viewmodel.SessionViewModel
+import kotlinx.coroutines.delay
 
 private enum class AuthMode { SIGN_IN, REGISTER, RESET }
 
@@ -68,7 +68,7 @@ private enum class AuthMode { SIGN_IN, REGISTER, RESET }
  * Sign in, register and password reset.
  *
  * Validation runs on the client for immediate feedback, but the repository validates
- * again â€” a client check is a courtesy, never a control. Errors are surfaced inline next
+ * again — a client check is a courtesy, never a control. Errors are surfaced inline next
  * to the field that caused them rather than in a snackbar that scrolls away.
  */
 @Composable
@@ -83,6 +83,7 @@ fun AuthScreen(viewModel: SessionViewModel) {
     var displayName by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var touched by remember { mutableStateOf(false) }
+    var landingMotion by remember { mutableStateOf(ChibiMotion.IDLE) }
 
     val keyboard = LocalSoftwareKeyboardController.current
 
@@ -91,6 +92,24 @@ fun AuthScreen(viewModel: SessionViewModel) {
         viewModel.clearFormError()
         viewModel.clearNotice()
         touched = false
+    }
+
+    // Preview every supplied animation on the public landing page. Once signed in,
+    // movement comes from GPS rather than this engagement loop.
+    LaunchedEffect(Unit) {
+        val showcase = listOf(
+            ChibiMotion.IDLE,
+            ChibiMotion.WALKING,
+            ChibiMotion.RUNNING,
+            ChibiMotion.JUMPING,
+            ChibiMotion.LOOSE
+        )
+        var index = 0
+        while (true) {
+            landingMotion = showcase[index]
+            delay(if (landingMotion == ChibiMotion.JUMPING) 1_600 else 3_000)
+            index = (index + 1) % showcase.size
+        }
     }
 
     val emailError = if (touched) LocalAuthRepository.validateEmail(email) else null
@@ -143,23 +162,9 @@ fun AuthScreen(viewModel: SessionViewModel) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(Modifier.height(24.dp))
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier.size(108.dp)
-            ) {
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surface, modifier = Modifier.size(84.dp)) {
                 Box(contentAlignment = Alignment.Center) {
-                    // Reuse the exact vector artwork used by the Android launcher icon.
-                    Image(
-                        painter = painterResource(R.drawable.ic_launcher_background),
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    Image(
-                        painter = painterResource(R.drawable.ic_launcher_foreground),
-                        contentDescription = "Biomate logo",
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    Text("🥾", style = MaterialTheme.typography.displayMedium)
                 }
             }
             Spacer(Modifier.height(20.dp))
@@ -173,6 +178,17 @@ fun AuthScreen(viewModel: SessionViewModel) {
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onPrimary,
                 textAlign = TextAlign.Center
+            )
+
+            Spacer(Modifier.height(20.dp))
+            ChibiAvatar(
+                userId = "landing-preview",
+                displayName = "Your trail buddy",
+                motion = landingMotion,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(240.dp),
+                backgroundColor = GradientTerracottaEnd
             )
 
             Spacer(Modifier.height(32.dp))
@@ -319,9 +335,9 @@ fun AuthScreen(viewModel: SessionViewModel) {
                         }
                         Text(
                             text = when {
-                                isSubmitting && mode == AuthMode.SIGN_IN -> "Signing inâ€¦"
-                                isSubmitting && mode == AuthMode.REGISTER -> "Creating accountâ€¦"
-                                isSubmitting -> "Sendingâ€¦"
+                                isSubmitting && mode == AuthMode.SIGN_IN -> "Signing in…"
+                                isSubmitting && mode == AuthMode.REGISTER -> "Creating account…"
+                                isSubmitting -> "Sending…"
                                 mode == AuthMode.SIGN_IN -> "Sign in"
                                 mode == AuthMode.REGISTER -> "Create account"
                                 else -> "Send reset link"
@@ -372,7 +388,7 @@ fun AuthScreen(viewModel: SessionViewModel) {
 /**
  * Surfaces the demo logins so the app can be evaluated without inventing an account.
  *
- * Shown only when running on the local backend â€” a Firebase-configured build has no demo
+ * Shown only when running on the local backend — a Firebase-configured build has no demo
  * credentials to offer, and advertising these against a real project would be a hole.
  */
 @Composable
@@ -391,7 +407,7 @@ private fun DevelopmentAccountsCard(onUse: (String) -> Unit) {
             Spacer(Modifier.height(6.dp))
             Text(
                 "No Firebase project is configured, so accounts and data stay on this device. " +
-                    "Two demo accounts are ready â€” sign in as both to try the multi-user flow.",
+                    "Two demo accounts are ready — sign in as both to try the multi-user flow.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -404,7 +420,7 @@ private fun DevelopmentAccountsCard(onUse: (String) -> Unit) {
                         .defaultMinSize(minHeight = 48.dp)
                 ) {
                     Text(
-                        "${seed.profile.displayName} Â· $devEmail",
+                        "${seed.profile.displayName} · $devEmail",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -464,7 +480,7 @@ private fun LabelledField(
         if (helper != null) {
             Spacer(Modifier.height(4.dp))
             Text(
-                text = if (error != null) "âš  $error" else helper,
+                text = if (error != null) "⚠ $error" else helper,
                 style = MaterialTheme.typography.bodySmall,
                 color = if (error != null) {
                     MaterialTheme.colorScheme.error
@@ -486,5 +502,3 @@ private fun Row2(content: @Composable () -> Unit) {
         verticalArrangement = Arrangement.Center
     ) { content() }
 }
-
-
