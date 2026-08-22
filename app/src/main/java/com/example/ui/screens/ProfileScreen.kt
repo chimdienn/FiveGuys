@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -35,6 +36,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.components.AdventurerAvatar
+import com.example.ui.components.ChibiAvatar
+import com.example.ui.components.rememberCurrentChibiMotion
+import com.example.data.location.LocationProvider
 import com.example.ui.components.SectionHeader
 import com.example.ui.components.StatTile
 import com.example.ui.components.VSpace
@@ -59,6 +63,7 @@ import java.util.Locale
 fun ProfileScreen(
     profileViewModel: ProfileViewModel,
     sessionViewModel: SessionViewModel,
+    locationProvider: LocationProvider,
     onBack: () -> Unit,
     onEditProfile: () -> Unit,
     onOpenConnections: () -> Unit,
@@ -70,6 +75,7 @@ fun ProfileScreen(
     val badges by profileViewModel.badges.collectAsStateWithLifecycle()
     val history by profileViewModel.history.collectAsStateWithLifecycle()
     val transactions by profileViewModel.transactions.collectAsStateWithLifecycle()
+    val chibiMotion by rememberCurrentChibiMotion(locationProvider)
 
     var showSignOut by remember { mutableStateOf(false) }
     val currentProfile = profile ?: return
@@ -108,10 +114,13 @@ fun ProfileScreen(
                     .padding(horizontal = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                AdventurerAvatar(
-                    initials = currentProfile.initials,
-                    colorHex = currentProfile.avatarColorHex,
-                    sizeDp = 96
+                ChibiAvatar(
+                    userId = currentProfile.uid,
+                    displayName = currentProfile.displayName,
+                    motion = chibiMotion,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(320.dp)
                 )
                 VSpace(14)
                 Text(

@@ -44,6 +44,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.domain.model.Trip
+import com.example.data.location.LocationProvider
 import com.example.domain.model.Weather
 import com.example.domain.repository.DailyChallengeView
 import com.example.domain.repository.LeaderboardEntry
@@ -51,12 +52,15 @@ import com.example.domain.weather.TrailRanking
 import com.example.domain.weather.TrailRecommendation
 import com.example.ui.components.AdventurerAvatar
 import com.example.ui.components.BiomateProgressBar
+import com.example.ui.components.ChibiAvatar
+import com.example.ui.components.ChibiMotion
 import com.example.ui.components.DifficultyBadge
 import com.example.ui.components.ErrorState
 import com.example.ui.components.SafetyNotice
 import com.example.ui.components.SectionHeader
 import com.example.ui.components.TrailHeroArt
 import com.example.ui.components.VSpace
+import com.example.ui.components.rememberCurrentChibiMotion
 import com.example.ui.viewmodel.HomeViewModel
 import com.example.ui.viewmodel.SessionViewModel
 import com.example.ui.viewmodel.WeatherUiState
@@ -76,6 +80,7 @@ import java.util.Locale
 fun HomeScreen(
     viewModel: HomeViewModel,
     sessionViewModel: SessionViewModel,
+    locationProvider: LocationProvider,
     onOpenTrail: (String) -> Unit,
     onOpenTrip: (String) -> Unit,
     onOpenDiscover: () -> Unit,
@@ -90,6 +95,7 @@ fun HomeScreen(
     val recommendation by viewModel.recommendation.collectAsStateWithLifecycle()
     val rankedTrails by viewModel.rankedTrails.collectAsStateWithLifecycle()
     val upcomingTrip by viewModel.upcomingTrip.collectAsStateWithLifecycle()
+    val chibiMotion by rememberCurrentChibiMotion(locationProvider)
 
     // Re-check the calendar day on every entry so an app left open overnight rolls its
     // challenges over rather than showing yesterday's.
@@ -116,8 +122,10 @@ fun HomeScreen(
         }
 
         item {
-            BiomateCharacter(
+            BiomateChibiCharacter(
                 userId = profile?.uid.orEmpty(),
+                displayName = profile?.displayName ?: "Adventurer",
+                motion = chibiMotion,
                 bioCoins = coins,
                 challengesCompleted = challenges.count { it.daily.isComplete },
                 challengeTotal = challenges.size
@@ -180,6 +188,65 @@ fun HomeScreen(
         }
 
         item { SafetyNotice(TrailRanking.SAFETY_DISCLAIMER) }
+    }
+}
+
+@Composable
+private fun BiomateChibiCharacter(
+    userId: String,
+    displayName: String,
+    motion: ChibiMotion,
+    bioCoins: Int,
+    challengesCompleted: Int,
+    challengeTotal: Int
+) {
+    val level = remember(bioCoins) { levelForCoins(bioCoins) }
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.primaryContainer
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            ChibiAvatar(
+                userId = userId,
+                displayName = displayName,
+                motion = motion,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(280.dp),
+                backgroundColor = MaterialTheme.colorScheme.primaryContainer
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Level $level",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        when (motion) {
+                            ChibiMotion.IDLE -> "Ready when you are."
+                            ChibiMotion.WALKING -> "Exploring at your pace."
+                            ChibiMotion.RUNNING -> "You're flying!"
+                            ChibiMotion.JUMPING -> "Big adventure energy!"
+                            ChibiMotion.LOOSE -> "Shake it off and try again."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                Text(
+                    "$bioCoins BioCoins",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+        }
     }
 }
 

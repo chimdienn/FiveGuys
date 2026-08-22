@@ -167,6 +167,7 @@ private fun SignedInApp(
                 HomeScreen(
                     viewModel = homeViewModel,
                     sessionViewModel = sessionViewModel,
+                    locationProvider = container.locationProvider,
                     onOpenTrail = { navController.navigate(Routes.trailDetail(it)) },
                     onOpenTrip = { navController.navigate(Routes.tripDetail(it)) },
                     onOpenDiscover = { navController.navigateToTab(Routes.DISCOVER) },
@@ -232,6 +233,8 @@ private fun SignedInApp(
                     tripId = tripId,
                     tripViewModel = tripViewModel,
                     matchViewModel = matchViewModel,
+                    locationProvider = container.locationProvider,
+                    currentUserId = sessionViewModel.currentProfile.value?.uid,
                     onBack = { navController.popBackStack() },
                     onOpenChat = { navController.navigate(Routes.conversation(it)) },
                     onStartAdventure = { trailId ->
@@ -307,6 +310,7 @@ private fun SignedInApp(
                 ProfileScreen(
                     profileViewModel = profileViewModel,
                     sessionViewModel = sessionViewModel,
+                    locationProvider = container.locationProvider,
                     onBack = { navController.popBackStack() },
                     onEditProfile = { navController.navigate(Routes.EDIT_PROFILE) },
                     onOpenConnections = { navController.navigate(Routes.CONNECTIONS) },

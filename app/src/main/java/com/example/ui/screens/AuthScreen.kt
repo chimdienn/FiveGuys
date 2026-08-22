@@ -57,7 +57,10 @@ import com.example.data.auth.LocalAuthRepository
 import com.example.data.seed.SeedUsers
 import com.example.ui.theme.GradientTerracottaEnd
 import com.example.ui.theme.GradientTerracottaStart
+import com.example.ui.components.ChibiAvatar
+import com.example.ui.components.ChibiMotion
 import com.example.ui.viewmodel.SessionViewModel
+import kotlinx.coroutines.delay
 
 private enum class AuthMode { SIGN_IN, REGISTER, RESET }
 
@@ -80,6 +83,7 @@ fun AuthScreen(viewModel: SessionViewModel) {
     var displayName by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var touched by remember { mutableStateOf(false) }
+    var landingMotion by remember { mutableStateOf(ChibiMotion.IDLE) }
 
     val keyboard = LocalSoftwareKeyboardController.current
 
@@ -88,6 +92,24 @@ fun AuthScreen(viewModel: SessionViewModel) {
         viewModel.clearFormError()
         viewModel.clearNotice()
         touched = false
+    }
+
+    // Preview every supplied animation on the public landing page. Once signed in,
+    // movement comes from GPS rather than this engagement loop.
+    LaunchedEffect(Unit) {
+        val showcase = listOf(
+            ChibiMotion.IDLE,
+            ChibiMotion.WALKING,
+            ChibiMotion.RUNNING,
+            ChibiMotion.JUMPING,
+            ChibiMotion.LOOSE
+        )
+        var index = 0
+        while (true) {
+            landingMotion = showcase[index]
+            delay(if (landingMotion == ChibiMotion.JUMPING) 1_600 else 3_000)
+            index = (index + 1) % showcase.size
+        }
     }
 
     val emailError = if (touched) LocalAuthRepository.validateEmail(email) else null
@@ -156,6 +178,17 @@ fun AuthScreen(viewModel: SessionViewModel) {
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onPrimary,
                 textAlign = TextAlign.Center
+            )
+
+            Spacer(Modifier.height(20.dp))
+            ChibiAvatar(
+                userId = "landing-preview",
+                displayName = "Your trail buddy",
+                motion = landingMotion,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(240.dp),
+                backgroundColor = GradientTerracottaEnd
             )
 
             Spacer(Modifier.height(32.dp))
