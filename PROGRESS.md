@@ -49,8 +49,9 @@ Verified on a Pixel emulator, signed in as the `alex@biomate.dev` demo account.
 - **OnTrail** — real fused-location tracking. Verified: 2.29 km travelled and 55% along
   route computed from injected GPS fixes, via haversine accumulation with jitter
   rejection and segment projection onto the trail polyline.
-- **Trail Moments** — created only at the device's verified position, seven categories,
-  visibility levels, map filters, ownership rules, age labelling.
+- **Trail Moments** — seven categories, visibility levels, map filters, ownership rules,
+  age labelling, current-GPS placement, and deliberate map-pin notes created by tapping
+  or long-pressing the live map.
 - **Trip completion** — session close, statistics write-back, attendance credit, challenge
   evaluation, badge evaluation, summary screen.
 - **Challenges and BioCoins** — deterministic daily assignment, automatic progress from

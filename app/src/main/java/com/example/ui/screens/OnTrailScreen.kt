@@ -93,6 +93,8 @@ fun OnTrailScreen(
     var showAddMoment by remember { mutableStateOf(false) }
     var showFinishConfirm by remember { mutableStateOf(false) }
     var showTrailInfo by remember { mutableStateOf(false) }
+    var pinPlacementMode by remember { mutableStateOf(false) }
+    var pinnedPoint by remember { mutableStateOf<GeoPoint?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -123,6 +125,13 @@ fun OnTrailScreen(
     val currentTrail = trail
     val isTracking = session != null
 
+    LaunchedEffect(isTracking) {
+        if (!isTracking) {
+            pinPlacementMode = false
+            pinnedPoint = null
+        }
+    }
+
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f)) {
@@ -142,6 +151,22 @@ fun OnTrailScreen(
                         routePoints = currentTrail?.route.orEmpty(),
                         currentPoint = (locationState as? LocationUiState.Available)?.fix?.point,
                         moments = moments,
+                        pendingPin = pinnedPoint,
+                        pinPlacementMode = pinPlacementMode,
+                        onMapPointSelected = { point ->
+                            if (isTracking && pinPlacementMode) {
+                                pinnedPoint = point
+                                pinPlacementMode = false
+                                showAddMoment = true
+                            }
+                        },
+                        onMapPointLongPressed = { point ->
+                            if (isTracking) {
+                                pinnedPoint = point
+                                pinPlacementMode = false
+                                showAddMoment = true
+                            }
+                        },
                         onMomentSelected = {}
                     )
                 }
@@ -157,6 +182,39 @@ fun OnTrailScreen(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
                             modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                }
+
+                if (isTracking) {
+                    OutlinedButton(
+                        onClick = {
+                            pinPlacementMode = !pinPlacementMode
+                            if (!pinPlacementMode) pinnedPoint = null
+                        },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(12.dp)
+                            .defaultMinSize(minHeight = 48.dp),
+                        shape = RoundedCornerShape(18.dp)
+                    ) {
+                        Text(if (pinPlacementMode) "Cancel pin" else "📍 Pin note")
+                    }
+                }
+
+                if (pinPlacementMode) {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 72.dp, start = 20.dp, end = 20.dp)
+                    ) {
+                        Text(
+                            "Tap the map where the note belongs. You can also long-press the map to pin immediately.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
                         )
                     }
                 }
@@ -255,7 +313,11 @@ fun OnTrailScreen(
                     if (isTracking) {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             OutlinedButton(
-                                onClick = { showAddMoment = true },
+                                onClick = {
+                                    pinnedPoint = null
+                                    pinPlacementMode = false
+                                    showAddMoment = true
+                                },
                                 modifier = Modifier
                                     .weight(1f)
                                     .defaultMinSize(minHeight = 52.dp),
@@ -306,12 +368,21 @@ fun OnTrailScreen(
 
     if (showAddMoment) {
         AddMomentDialog(
-            hasLocation = locationState is LocationUiState.Available,
+            hasLocation = pinnedPoint != null || locationState is LocationUiState.Available,
+            pinnedPoint = pinnedPoint,
             onAdd = { category, description ->
-                viewModel.addMoment(category, description)
+                viewModel.addMoment(
+                    category = category,
+                    description = description,
+                    locationOverride = pinnedPoint
+                )
                 showAddMoment = false
+                pinnedPoint = null
             },
-            onDismiss = { showAddMoment = false }
+            onDismiss = {
+                showAddMoment = false
+                pinnedPoint = null
+            }
         )
     }
 
@@ -417,6 +488,10 @@ private fun TrailMap(
     routePoints: List<GeoPoint>,
     currentPoint: GeoPoint?,
     moments: List<com.example.domain.model.TrailMoment>,
+    pendingPin: GeoPoint?,
+    pinPlacementMode: Boolean,
+    onMapPointSelected: (GeoPoint) -> Unit,
+    onMapPointLongPressed: (GeoPoint) -> Unit,
     onMomentSelected: (com.example.domain.model.TrailMoment) -> Unit
 ) {
     val cameraPositionState = rememberCameraPositionState()
@@ -436,6 +511,14 @@ private fun TrailMap(
     GoogleMap(
         modifier = Modifier.fillMaxSize(),
         cameraPositionState = cameraPositionState,
+        onMapClick = { latLng ->
+            if (pinPlacementMode) {
+                onMapPointSelected(GeoPoint(latLng.latitude, latLng.longitude))
+            }
+        },
+        onMapLongClick = { latLng ->
+            onMapPointLongPressed(GeoPoint(latLng.latitude, latLng.longitude))
+        },
         properties = MapProperties(
             // The blue dot is drawn by the SDK only when permission is held; the app's own
             // marker below is what the tracking logic actually uses.
@@ -477,6 +560,14 @@ private fun TrailMap(
                     onMomentSelected(moment)
                     false
                 }
+            )
+        }
+
+        pendingPin?.let { point ->
+            Marker(
+                state = MarkerState(LatLng(point.latitude, point.longitude)),
+                title = "New pinned note",
+                snippet = "Add a note for this location"
             )
         }
 
@@ -556,13 +647,14 @@ private fun LocationPermissionExplainer(onGrant: () -> Unit) {
 /**
  * Creating a Trail Moment.
  *
- * Disabled without a location fix, with the reason stated. A moment whose coordinates are
- * a guess is worse than no moment (spec section 34).
+ * A moment can use the live GPS position or a deliberate point selected on the map.
+ * The selected point is always explicit in the dialog before the note is shared.
  */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun AddMomentDialog(
     hasLocation: Boolean,
+    pinnedPoint: GeoPoint?,
     onAdd: (MomentCategory, String) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -574,21 +666,52 @@ private fun AddMomentDialog(
         title = { Text("Leave a Trail Moment") },
         text = {
             Column {
-                if (!hasLocation) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.errorContainer,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            "Waiting for a GPS fix. A moment is pinned to where you actually are, " +
-                                "so it can't be created yet.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.padding(12.dp)
-                        )
+                when {
+                    pinnedPoint != null -> {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(Modifier.padding(12.dp)) {
+                                Text(
+                                    "📍 Pinned map location",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    "This note will appear exactly where you tapped the map.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+                        VSpace(12)
                     }
-                    VSpace(12)
+                    hasLocation -> {
+                        Text(
+                            "📍 This moment will use your current GPS location.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        VSpace(12)
+                    }
+                    else -> {
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                "Waiting for a GPS fix. Use Pin note on the map to choose a location, " +
+                                    "or wait for your current position.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                        VSpace(12)
+                    }
                 }
 
                 Text(

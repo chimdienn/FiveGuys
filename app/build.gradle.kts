@@ -10,13 +10,11 @@ plugins {
   alias(libs.plugins.google.services)
 }
 
-
 /**
  * Finds the Google Maps API key, or returns an empty string.
  *
- * Order: `.env` (git-ignored, matches the secrets plugin convention), then
- * `local.properties`, then a `MAPS_API_KEY` environment variable for CI. Never commit a
- * real key to any of these — see README.md.
+ * Order: `.env` (git-ignored), then `local.properties`, then a `MAPS_API_KEY`
+ * environment variable for CI. Never commit a real key.
  */
 fun resolveMapsApiKey(): String {
   val fromFiles: String? = listOf(rootProject.file(".env"), rootProject.file("local.properties"))
@@ -43,14 +41,8 @@ android {
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-    // The Maps SDK reads its key from a manifest meta-data entry, which needs the value
-    // at configuration time rather than as a BuildConfig field. Resolved from `.env`,
-    // then `local.properties`, then an environment variable, so CI and a local checkout
-    // can each supply it their own way.
-    //
-    // The fallback is an empty string rather than a hard failure: without a key the map
-    // tiles do not render, but every other part of the app — GPS, distance, moments —
-    // still works, and a contributor should not be blocked from building over it.
+    // Google Maps SDK reads this manifest placeholder at runtime. The value comes from
+    // the local git-ignored config, never from committed source.
     manifestPlaceholders["MAPS_API_KEY"] = resolveMapsApiKey()
   }
 
@@ -71,10 +63,9 @@ android {
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }
-    // Use the Android Gradle plugin's standard debug keystore. It creates the
-    // user-local keystore when needed, so a checkout does not depend on an
-    // untracked debug.keystore in the repository root.
-    debug { signingConfig = signingConfigs.getByName("debug") }
+    // Do not point debug builds at a repository-local debug.keystore. Android's normal
+    // debug signing is used automatically, which makes a fresh clone runnable.
+    debug { }
   }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11
@@ -90,13 +81,13 @@ android {
     includeInApk = false
     includeInBundle = true
   }
-  // The supplied GLB files live in app/sampledata. Package that directory as
-  // Android assets so SceneView can stream them without duplicating binaries.
+
+  // 3D branch: package the supplied GLB models from app/sampledata as runtime assets.
   sourceSets["main"].assets.srcDir("sampledata")
 }
 
-// Configure the Secrets Gradle Plugin to use .env and .env.example files
-// to match the convention used in Web projects.
+// The Secrets Gradle Plugin exposes values from `.env` / `.env.example` as BuildConfig
+// fields. AppContainer uses BuildConfig.GEMINI_API_KEY for the direct Gemini camera path.
 secrets {
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"
@@ -105,8 +96,6 @@ secrets {
 
 googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }
 
-// Some unused dependencies are commented out below instead of being removed.
-// This makes it easy to add them back in the future if needed.
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
   implementation(platform(libs.firebase.bom))
@@ -136,7 +125,6 @@ dependencies {
   implementation(libs.firebase.firestore)
   implementation(libs.firebase.storage)
   implementation(libs.firebase.functions)
-
   implementation(libs.firebase.auth)
   implementation(libs.firebase.appcheck.recaptcha)
   implementation(libs.kotlinx.coroutines.android)
@@ -148,6 +136,7 @@ dependencies {
   implementation(libs.play.services.maps)
   implementation(libs.maps.compose)
   implementation(libs.retrofit)
+  // 3D branch: native Filament/SceneView renderer for the chibi GLB avatars.
   implementation(libs.sceneview)
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)

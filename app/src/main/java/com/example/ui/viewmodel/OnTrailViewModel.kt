@@ -251,22 +251,26 @@ class OnTrailViewModel(
     }
 
     /**
-     * Records an observation at the device's verified position.
+     * Records an observation either at the user's live GPS position or at an explicit
+     * location they selected on the trail map.
      *
-     * Refuses without a fix rather than falling back to the trail start — a hazard pinned
-     * to the wrong place is worse than no hazard report at all (spec section 34).
+     * [locationOverride] is used by the map-pin workflow. When it is null, the existing
+     * Add Moment action keeps its original behaviour and uses the current GPS fix.
      */
     fun addMoment(
         category: MomentCategory,
         description: String,
         photoBytes: ByteArray? = null,
-        visibility: MomentVisibility = MomentVisibility.PUBLIC
+        visibility: MomentVisibility = MomentVisibility.PUBLIC,
+        locationOverride: GeoPoint? = null
     ) {
         val me = profileFlow.value ?: return
         val trailId = _activeTrailId.value ?: return
-        val fix = (_locationState.value as? LocationUiState.Available)?.fix
-        if (fix == null) {
-            _message.value = "Waiting for your location — a Trail Moment is pinned where you are."
+        val livePoint = (_locationState.value as? LocationUiState.Available)?.fix?.point
+        val selectedPoint = locationOverride ?: livePoint
+
+        if (selectedPoint == null) {
+            _message.value = "Choose a point on the map or wait for your current GPS location."
             return
         }
 
@@ -278,13 +282,17 @@ class OnTrailViewModel(
                 author = me,
                 trailId = trailId,
                 tripId = activeSession.value?.tripId,
-                deviceLocation = fix.point,
+                deviceLocation = selectedPoint,
                 category = category,
                 description = description,
                 photoUrl = photoUrl,
                 visibility = visibility
             ).onSuccess {
-                _message.value = "Trail Moment shared."
+                _message.value = if (locationOverride != null) {
+                    "Map note pinned."
+                } else {
+                    "Trail Moment shared."
+                }
                 applyChallengeProgress(me.uid, ActivitySignal(momentsCreated = 1))
             }.onFailure { _message.value = it.message ?: "Could not save that moment." }
         }

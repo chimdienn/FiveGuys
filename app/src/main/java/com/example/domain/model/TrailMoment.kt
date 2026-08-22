@@ -19,9 +19,8 @@ enum class MomentVisibility { PUBLIC, CONNECTIONS, TRIP }
 /**
  * An observation left at the author's real physical location.
  *
- * The coordinates are always the device's verified position at creation time — Biomate
- * deliberately offers no arbitrary map-pin placement (spec section 34), because a hazard
- * report is only worth anything if it is where it says it is.
+ * Coordinates may come from the user's live GPS position or from a location they
+ * deliberately pin on the live trail map.
  */
 data class TrailMoment(
     val id: String,

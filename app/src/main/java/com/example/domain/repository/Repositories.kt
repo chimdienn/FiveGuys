@@ -144,10 +144,8 @@ interface TrailMomentRepository {
     fun observeMomentsByUser(uid: String): Flow<List<TrailMoment>>
 
     /**
-     * Creates a moment at the caller's verified current position.
-     *
-     * [deviceLocation] must come from the location provider, not from a map tap — the
-     * implementation has no other way to place a pin.
+     * Creates a Trail Moment at an explicit geographic point. The UI may supply the
+     * current GPS fix or a point deliberately selected on the live trail map.
      */
     suspend fun create(
         author: UserProfile,

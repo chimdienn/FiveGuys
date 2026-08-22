@@ -2,6 +2,8 @@ package com.example.ui.screens
 
 import android.Manifest
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -72,10 +74,7 @@ import com.example.ui.viewmodel.CameraMode
 import com.example.ui.viewmodel.CaptureState
 import com.example.ui.viewmodel.OnTrailViewModel
 import com.example.ui.viewmodel.ScanViewModel
-import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.ByteArrayOutputStream
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 /**
  * The camera, in two modes.
@@ -370,7 +369,15 @@ private fun CameraPreview(
 
 private const val TAG = "PhotoScanScreen"
 
-/** Grabs one frame from CameraX and hands back JPEG bytes. */
+/**
+ * Grabs one frame from CameraX and returns a normal, correctly-oriented JPEG.
+ *
+ * Reading only `image.planes[0]` assumes every device returns an already encoded JPEG.
+ * ImageProxy can legally be JPEG or YUV/RGBA on different CameraX/device pipelines, and
+ * it also carries a rotation that must be applied. Converting through `toBitmap()` makes
+ * the bytes sent to Gemini consistent across real phones. The image is also scaled down
+ * before upload so a 48 MP camera does not create a needlessly large/slow API request.
+ */
 private fun capturePhoto(
     context: Context,
     imageCapture: ImageCapture,
@@ -382,12 +389,39 @@ private fun capturePhoto(
         object : ImageCapture.OnImageCapturedCallback() {
             override fun onCaptureSuccess(image: ImageProxy) {
                 try {
-                    val buffer = image.planes[0].buffer
-                    val bytes = ByteArray(buffer.remaining()).also { buffer.get(it) }
+                    val source = image.toBitmap()
+                    val rotation = image.imageInfo.rotationDegrees
+                    val oriented = if (rotation == 0) {
+                        source
+                    } else {
+                        Bitmap.createBitmap(
+                            source,
+                            0,
+                            0,
+                            source.width,
+                            source.height,
+                            Matrix().apply { postRotate(rotation.toFloat()) },
+                            true
+                        )
+                    }
+
+                    val resized = scaleForGemini(oriented, maxDimension = 1600)
+                    val output = ByteArrayOutputStream()
+                    check(resized.compress(Bitmap.CompressFormat.JPEG, 88, output)) {
+                        "JPEG compression failed"
+                    }
+                    val bytes = output.toByteArray()
+                    check(bytes.isNotEmpty()) { "Captured JPEG was empty" }
+
+                    if (resized !== oriented) resized.recycle()
+                    if (oriented !== source) oriented.recycle()
+                    source.recycle()
+
+                    Log.d(TAG, "Camera image prepared for Gemini: ${bytes.size / 1024} KB")
                     onSuccess(bytes)
                 } catch (e: Exception) {
-                    Log.e(TAG, "Could not read the captured frame", e)
-                    onError("Could not read that photo. Try again.")
+                    Log.e(TAG, "Could not prepare the captured frame", e)
+                    onError("Could not prepare that photo for AI identification. Try again.")
                 } finally {
                     // Always closed: a leaked ImageProxy stalls the whole capture pipeline.
                     image.close()
@@ -399,6 +433,18 @@ private fun capturePhoto(
                 onError("The camera could not take that photo.")
             }
         }
+    )
+}
+
+private fun scaleForGemini(bitmap: Bitmap, maxDimension: Int): Bitmap {
+    val largest = maxOf(bitmap.width, bitmap.height)
+    if (largest <= maxDimension) return bitmap
+    val scale = maxDimension.toFloat() / largest.toFloat()
+    return Bitmap.createScaledBitmap(
+        bitmap,
+        (bitmap.width * scale).toInt().coerceAtLeast(1),
+        (bitmap.height * scale).toInt().coerceAtLeast(1),
+        true
     )
 }
 

@@ -28,11 +28,8 @@ class LocalTrailMomentRepository(
         dao.observeMomentsByUser(uid).map { list -> list.map { it.toDomain() } }
 
     /**
-     * Creates a moment at the device's current position.
-     *
-     * There is no coordinate parameter a caller could supply from a map tap — the only
-     * position accepted is the one the location provider reported (spec section 34), so a
-     * hazard report always means "this is here", never "this is somewhere I pointed at".
+     * Creates a moment at a validated geographic point. The point can come from the live
+     * GPS fix or from the user's deliberate map-pin selection.
      */
     override suspend fun create(
         author: UserProfile,
