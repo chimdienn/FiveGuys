@@ -172,6 +172,57 @@ devices agree on a compatibility score.
 
 ---
 
+## Adding 3D chibi assets
+
+Chibi characters are rendered from binary glTF (`.glb`) files by SceneView/Filament. Put
+new character files directly in:
+
+```text
+app/sampledata/
+```
+
+Do not put runtime models in `app/src/main/res` or Android Studio's preview-only sample
+data directories. `app/build.gradle.kts` registers `app/sampledata` as the main Android
+asset source directory, so every file there is packaged into the APK and addressed by its
+filename, for example `mini_chibi_kid_free_demo.glb`.
+
+### Animation contract
+
+Each movement-ready GLB must contain one loopable animation for each of these states:
+
+| App state | Accepted clip name |
+|---|---|
+| Idle | `Idle` or `Idle 01` |
+| Walking | `Walk` or `Walk 01` |
+| Running | `Run` or `Run 01` |
+| Jumping | `Jump` or `Jump 01` |
+| Loose | `Loose` or `Loose 01` |
+
+Animation names are case-sensitive. Export the mesh, skeleton, textures and clips together
+in one GLB. Keep the character upright, facing forward, with its origin at ground level;
+the renderer normalises the model height but cannot repair a misplaced rig or pivot.
+
+After adding a model, register it in `animatedChibis` inside
+`app/src/main/java/com/example/ui/components/ChibiAvatar.kt`. Supply the packaged filename
+and `" 01"` when its clips use the numbered names, otherwise use an empty suffix. User IDs
+are hashed across this list, making a user's assigned model stable on every screen.
+
+Before committing an asset:
+
+1. Confirm that you have redistribution rights and record its licence/attribution.
+2. Remove unused cameras, lights, meshes, textures and animations in the authoring tool.
+3. Prefer compressed textures and a mobile-appropriate polygon count; every registered
+   GLB increases APK size and runtime memory use.
+4. Run `./gradlew :app:assembleDebug`, then inspect the avatar on Home, Profile, Buddies
+   and a trip with up to six participants.
+5. Check `adb logcat` for `Filament`, `gltfio` and `AndroidRuntime` errors.
+
+Movement selection is implemented by `ChibiMotion`: GPS speeds below `0.45 m/s` idle,
+speeds below `2.7 m/s` walk, and faster movement runs. Remote users currently idle until
+live activity synchronisation is implemented.
+
+---
+
 ## Running tests
 
 ```bash
@@ -234,7 +285,7 @@ See `firebase/firestore.rules` for the full authorization model.
 
 ## Explicitly out of scope
 
-3D character, character marketplace, AR navigation, turn-by-turn navigation, Garmin /
+Character marketplace, AR navigation, turn-by-turn navigation, Garmin /
 Strava / Apple Health / Health Connect integrations, background GPS, complex communities,
 video feed, advanced reputation, subscriptions, marketplace, crypto, AI trip planning,
 recommendation ML, dedicated species-recognition models, large-scale moderation, friend

@@ -49,6 +49,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.domain.model.UserProfile
 import com.example.ui.components.AdventurerAvatar
+import com.example.ui.components.ChibiAvatar
+import com.example.ui.components.ChibiMotion
 import com.example.ui.components.BiomateProgressBar
 import com.example.ui.components.EmptyState
 import com.example.ui.components.VSpace
@@ -504,6 +506,15 @@ private fun ProfileDetailSheet(
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 32.dp)
         ) {
+            ChibiAvatar(
+                userId = profile.uid,
+                displayName = profile.displayName,
+                motion = ChibiMotion.IDLE,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(280.dp)
+            )
+            VSpace(16)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 AdventurerAvatar(
                     initials = profile.initials,

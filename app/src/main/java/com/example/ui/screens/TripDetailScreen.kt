@@ -52,6 +52,11 @@ import com.example.domain.model.TripRole
 import com.example.domain.model.TripStatus
 import com.example.ui.components.AdventurerAvatar
 import com.example.ui.components.BiomateProgressBar
+import com.example.ui.components.ChibiGroup
+import com.example.ui.components.ChibiMotion
+import com.example.ui.components.ChibiParticipant
+import com.example.ui.components.rememberCurrentChibiMotion
+import com.example.data.location.LocationProvider
 import com.example.ui.components.LoadingState
 import com.example.ui.components.SectionHeader
 import com.example.ui.components.VSpace
@@ -73,6 +78,8 @@ fun TripDetailScreen(
     tripId: String,
     tripViewModel: TripViewModel,
     matchViewModel: MatchViewModel,
+    locationProvider: LocationProvider,
+    currentUserId: String?,
     onBack: () -> Unit,
     onOpenChat: (String) -> Unit,
     onStartAdventure: (String) -> Unit
@@ -88,6 +95,7 @@ fun TripDetailScreen(
     val isOrganiser by tripViewModel.isOrganiser.collectAsStateWithLifecycle()
     val myMembership by tripViewModel.myMembership.collectAsStateWithLifecycle()
     val connections by matchViewModel.connectedProfiles.collectAsStateWithLifecycle()
+    val myMotion by rememberCurrentChibiMotion(locationProvider)
 
     var showInvite by remember { mutableStateOf(false) }
     var showAddGear by remember { mutableStateOf(false) }
@@ -167,6 +175,21 @@ fun TripDetailScreen(
                         )
                     }
                 }
+            }
+        }
+
+        if (joined.size in 1..6) {
+            item {
+                ChibiGroup(
+                    participants = joined.map { member ->
+                        ChibiParticipant(
+                            userId = member.uid,
+                            displayName = member.displayName,
+                            motion = if (member.uid == currentUserId) myMotion else ChibiMotion.IDLE
+                        )
+                    },
+                    modifier = Modifier.padding(horizontal = 20.dp)
+                )
             }
         }
 

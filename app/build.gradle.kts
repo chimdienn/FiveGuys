@@ -62,12 +62,6 @@ android {
       keyAlias = "upload"
       keyPassword = System.getenv("KEY_PASSWORD")
     }
-    create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
-    }
   }
 
   buildTypes {
@@ -77,7 +71,10 @@ android {
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }
-    debug { signingConfig = signingConfigs.getByName("debugConfig") }
+    // Use the Android Gradle plugin's standard debug keystore. It creates the
+    // user-local keystore when needed, so a checkout does not depend on an
+    // untracked debug.keystore in the repository root.
+    debug { signingConfig = signingConfigs.getByName("debug") }
   }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11
@@ -93,6 +90,9 @@ android {
     includeInApk = false
     includeInBundle = true
   }
+  // The supplied GLB files live in app/sampledata. Package that directory as
+  // Android assets so SceneView can stream them without duplicating binaries.
+  sourceSets["main"].assets.srcDir("sampledata")
 }
 
 // Configure the Secrets Gradle Plugin to use .env and .env.example files
@@ -148,6 +148,7 @@ dependencies {
   implementation(libs.play.services.maps)
   implementation(libs.maps.compose)
   implementation(libs.retrofit)
+  implementation(libs.sceneview)
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)
   testImplementation(libs.androidx.junit)
